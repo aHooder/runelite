@@ -41,4 +41,8 @@ public @interface Range
 	int min() default 0;
 
 	int max() default Integer.MAX_VALUE;
+
+	boolean slider() default false;
+
+	boolean wrapAround() default false;
 }
