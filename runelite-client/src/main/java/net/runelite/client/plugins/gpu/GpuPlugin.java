@@ -1046,52 +1046,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		final AntiAliasingMode antiAliasingMode = config.antiAliasingMode();
 		final boolean aaEnabled = antiAliasingMode != AntiAliasingMode.DISABLED;
 
-		if (aaEnabled)
-		{
-			gl.glEnable(gl.GL_MULTISAMPLE);
-
-			final Dimension stretchedDimensions = client.getStretchedDimensions();
-
-			final int stretchedCanvasWidth = client.isStretchedEnabled() ? stretchedDimensions.width : canvasWidth;
-			final int stretchedCanvasHeight = client.isStretchedEnabled() ? stretchedDimensions.height : canvasHeight;
-
-			// Re-create fbo
-			if (lastStretchedCanvasWidth != stretchedCanvasWidth
-				|| lastStretchedCanvasHeight != stretchedCanvasHeight
-				|| lastAntiAliasingMode != antiAliasingMode)
-			{
-				shutdownAAFbo();
-
-				// Bind default FBO to check whether anti-aliasing is forced
-				gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0);
-				final int forcedAASamples = glGetInteger(gl, gl.GL_SAMPLES);
-				final int maxSamples = glGetInteger(gl, gl.GL_MAX_SAMPLES);
-				final int samples = forcedAASamples != 0 ? forcedAASamples :
-					Math.min(antiAliasingMode.getSamples(), maxSamples);
-
-				log.debug("AA samples: {}, max samples: {}, forced samples: {}", samples, maxSamples, forcedAASamples);
-
-				initAAFbo(stretchedCanvasWidth, stretchedCanvasHeight, samples);
-
-				lastStretchedCanvasWidth = stretchedCanvasWidth;
-				lastStretchedCanvasHeight = stretchedCanvasHeight;
-			}
-
-			gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, fboSceneHandle);
-		}
-		else
-		{
-			gl.glDisable(gl.GL_MULTISAMPLE);
-			shutdownAAFbo();
-		}
-
-		lastAntiAliasingMode = antiAliasingMode;
-
-		// Clear scene
-		int sky = client.getSkyboxColor();
-		gl.glClearColor((sky >> 16 & 0xFF) / 255f, (sky >> 8 & 0xFF) / 255f, (sky & 0xFF) / 255f, 1f);
-		gl.glClear(gl.GL_COLOR_BUFFER_BIT);
-
 		// Draw 3d scene
 		final TextureProvider textureProvider = client.getTextureProvider();
 		if (textureProvider != null)
@@ -1104,11 +1058,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			}
 
 			final Texture[] textures = textureProvider.getTextures();
-			int renderHeightOff = client.getViewportYOffset();
-			int renderWidthOff = client.getViewportXOffset();
-			int renderCanvasHeight = canvasHeight;
-			int renderViewportHeight = viewportHeight;
-			int renderViewportWidth = viewportWidth;
 
 			// Setup anisotropic filtering
 			final int anisotropicFilteringLevel = config.anisotropicFilteringLevel();
@@ -1119,30 +1068,9 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				lastAnisotropicFilteringLevel = anisotropicFilteringLevel;
 			}
 
-			if (client.isStretchedEnabled())
-			{
-				Dimension dim = client.getStretchedDimensions();
-				renderCanvasHeight = dim.height;
-
-				double scaleFactorY = dim.getHeight() / canvasHeight;
-				double scaleFactorX = dim.getWidth()  / canvasWidth;
-
-				// Pad the viewport a little because having ints for our viewport dimensions can introduce off-by-one errors.
-				final int padding = 1;
-
-				// Ceil the sizes because even if the size is 599.1 we want to treat it as size 600 (i.e. render to the x=599 pixel).
-				renderViewportHeight = (int) Math.ceil(scaleFactorY * (renderViewportHeight)) + padding * 2;
-				renderViewportWidth  = (int) Math.ceil(scaleFactorX * (renderViewportWidth ))  + padding * 2;
-
-				// Floor the offsets because even if the offset is 4.9, we want to render to the x=4 pixel anyway.
-				renderHeightOff      = (int) Math.floor(scaleFactorY * (renderHeightOff)) - padding;
-				renderWidthOff       = (int) Math.floor(scaleFactorX * (renderWidthOff )) - padding;
-			}
-
-			glDpiAwareViewport(renderWidthOff, renderCanvasHeight - renderViewportHeight - renderHeightOff, renderViewportWidth, renderViewportHeight);
-
 			gl.glUseProgram(glProgram);
 
+			final int sky = client.getSkyboxColor();
 			final int drawDistance = getDrawDistance();
 			final int fogDepth = config.fogDepth();
 			gl.glUniform1i(uniUseFog, fogDepth > 0 ? 1 : 0);
@@ -1179,9 +1107,11 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				textureOffsets[id * 2 + 1] = texture.getV();
 			}
 
+			// Bind samplers to texture units
+			gl.glUniform1i(uniTextures, 1); // texture sampler array is bound to TEXTURE1
+
 			// Bind uniforms
 			gl.glUniformBlockBinding(glProgram, uniBlockMain, 0);
-			gl.glUniform1i(uniTextures, 1); // texture sampler array is bound to texture1
 			gl.glUniform2fv(uniTextureOffsets, textureOffsets.length, textureOffsets, 0);
 
 			// We just allow the GL to do face culling. Note this requires the priority renderer
@@ -1192,7 +1122,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			gl.glEnable(gl.GL_BLEND);
 			gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA);
 
-			// Draw buffers
+			// Bind vertex and UV buffers
 			gl.glBindVertexArray(vaoHandle);
 
 			int vertexBuffer, uvBuffer;
@@ -1228,6 +1158,81 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			gl.glBindBuffer(GL_ARRAY_BUFFER, uvBuffer);
 			gl.glVertexAttribPointer(1, 4, gl.GL_FLOAT, false, 0, 0);
 
+			int renderHeightOff = client.getViewportYOffset();
+			int renderWidthOff = client.getViewportXOffset();
+			int renderCanvasHeight = canvasHeight;
+			int renderViewportHeight = viewportHeight;
+			int renderViewportWidth = viewportWidth;
+
+			if (client.isStretchedEnabled())
+			{
+				Dimension dim = client.getStretchedDimensions();
+				renderCanvasHeight = dim.height;
+
+				double scaleFactorY = dim.getHeight() / canvasHeight;
+				double scaleFactorX = dim.getWidth()  / canvasWidth;
+
+				// Pad the viewport a little because having ints for our viewport dimensions can introduce off-by-one errors.
+				final int padding = 1;
+
+				// Ceil the sizes because even if the size is 599.1 we want to treat it as size 600 (i.e. render to the x=599 pixel).
+				renderViewportHeight = (int) Math.ceil(scaleFactorY * (renderViewportHeight)) + padding * 2;
+				renderViewportWidth  = (int) Math.ceil(scaleFactorX * (renderViewportWidth ))  + padding * 2;
+
+				// Floor the offsets because even if the offset is 4.9, we want to render to the x=4 pixel anyway.
+				renderHeightOff      = (int) Math.floor(scaleFactorY * (renderHeightOff)) - padding;
+				renderWidthOff       = (int) Math.floor(scaleFactorX * (renderWidthOff )) - padding;
+			}
+
+			glDpiAwareViewport(renderWidthOff, renderCanvasHeight - renderViewportHeight - renderHeightOff, renderViewportWidth, renderViewportHeight);
+
+			// Bind anti-aliasing FBO or default FBO
+			if (aaEnabled)
+			{
+				gl.glEnable(gl.GL_MULTISAMPLE);
+
+				final Dimension stretchedDimensions = client.getStretchedDimensions();
+
+				final int stretchedCanvasWidth = client.isStretchedEnabled() ? stretchedDimensions.width : canvasWidth;
+				final int stretchedCanvasHeight = client.isStretchedEnabled() ? stretchedDimensions.height : canvasHeight;
+
+				// Re-create fbo
+				if (lastStretchedCanvasWidth != stretchedCanvasWidth
+					|| lastStretchedCanvasHeight != stretchedCanvasHeight
+					|| lastAntiAliasingMode != antiAliasingMode)
+				{
+					shutdownAAFbo();
+
+					// Bind default FBO to check whether anti-aliasing is forced
+					gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0);
+					final int forcedAASamples = glGetInteger(gl, gl.GL_SAMPLES);
+					final int maxSamples = glGetInteger(gl, gl.GL_MAX_SAMPLES);
+					final int samples = forcedAASamples != 0 ? forcedAASamples :
+						Math.min(antiAliasingMode.getSamples(), maxSamples);
+
+					log.debug("AA samples: {}, max samples: {}, forced samples: {}", samples, maxSamples, forcedAASamples);
+
+					initAAFbo(stretchedCanvasWidth, stretchedCanvasHeight, samples);
+
+					lastStretchedCanvasWidth = stretchedCanvasWidth;
+					lastStretchedCanvasHeight = stretchedCanvasHeight;
+				}
+
+				gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, fboSceneHandle);
+			}
+			else
+			{
+				gl.glDisable(gl.GL_MULTISAMPLE);
+				shutdownAAFbo();
+				gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, 0);
+			}
+
+			lastAntiAliasingMode = antiAliasingMode;
+
+			// Clear scene
+			gl.glClearColor((sky >> 16 & 0xFF) / 255f, (sky >> 8 & 0xFF) / 255f, (sky & 0xFF) / 255f, 1f);
+			gl.glClear(gl.GL_COLOR_BUFFER_BIT);
+
 			gl.glDrawArrays(gl.GL_TRIANGLES, 0, targetBufferOffset);
 
 			gl.glDisable(gl.GL_BLEND);
@@ -1236,6 +1241,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			gl.glUseProgram(0);
 		}
 
+		// If the scene was drawn to the anti-aliasing FBO, blit its contents to the default FBO
 		if (aaEnabled)
 		{
 			gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, fboSceneHandle);
