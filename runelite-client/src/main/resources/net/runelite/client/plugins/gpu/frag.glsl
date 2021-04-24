@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, Adam <Adam@sigterm.info>
+ * Copyright (c) 2021, Hooder <https://github.com/aHooder>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,6 +26,10 @@
 #version 330
 
 uniform sampler2DArray textures;
+uniform sampler2DShadow shadowMap;
+
+uniform int renderPass;
+
 uniform vec2 textureOffsets[128];
 uniform float brightness;
 uniform float smoothBanding;
@@ -32,16 +37,21 @@ uniform vec4 fogColor;
 uniform int colorBlindMode;
 uniform float textureLightMode;
 
+uniform bool enableShadows;
+uniform float shadowStrength;
+
 in vec4 Color;
 noperspective centroid in float fHsl;
 flat in int textureId;
 in vec2 fUv;
 in float fogAmount;
+in vec4 positionLightSpace;
 
 out vec4 FragColor;
 
 #include hsl_to_rgb.glsl
 #include colorblind.glsl
+#include shadows.glsl
 
 void main() {
   vec4 c;
@@ -64,10 +74,28 @@ void main() {
     c = vec4(rgb, Color.a);
   }
 
-  if (colorBlindMode > 0) {
-    c.rgb = colorblind(colorBlindMode, c.rgb);
-  }
+  switch (renderPass) {
+    case 0: // SCENE
+      if (colorBlindMode > 0) {
+        c.rgb = colorblind(colorBlindMode, c.rgb);
+      }
 
-  vec3 mixedColor = mix(c.rgb, fogColor.rgb, fogAmount);
-  FragColor = vec4(mixedColor, c.a);
+      if (enableShadows) {
+        c = applyShadows(c);
+      }
+
+      vec3 mixedColor = mix(c.rgb, fogColor.rgb, fogAmount);
+      FragColor = vec4(mixedColor, c.a);
+      break;
+    case 1: // SHADOW_MAP_OPAQUE
+      // Let light pass through very translucent fragments, such as glass.
+      // .12 doesn't produce flickering shadows for portals, while letting
+      // light pass through very translucent glass.
+      if (c.a < .12f) {
+        discard;
+      }
+
+      // gl_FragDepth is written to automatically
+      break;
+  }
 }

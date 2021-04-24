@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, Adam <Adam@sigterm.info>
+ * Copyright (c) 2021, Hooder <https://github.com/aHooder>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,16 +28,26 @@ package net.runelite.client.plugins.gpu;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
+import net.runelite.client.config.Units;
 import static net.runelite.client.plugins.gpu.GpuPlugin.MAX_DISTANCE;
 import static net.runelite.client.plugins.gpu.GpuPlugin.MAX_FOG_DEPTH;
 import net.runelite.client.plugins.gpu.config.AntiAliasingMode;
 import net.runelite.client.plugins.gpu.config.ColorBlindMode;
+import net.runelite.client.plugins.gpu.config.ShadowResolution;
 import net.runelite.client.plugins.gpu.config.UIScalingMode;
 
 @ConfigGroup("gpu")
 public interface GpuPluginConfig extends Config
 {
+	@ConfigSection(
+		name = "Shadows",
+		description = "Options that configure shadows",
+		position = 10
+	)
+	String shadowSection = "shadowSection";
+
 	@Range(
 		max = MAX_DISTANCE
 	)
@@ -64,7 +75,7 @@ public interface GpuPluginConfig extends Config
 
 	@ConfigItem(
 		keyName = "antiAliasingMode",
-		name = "Anti Aliasing",
+		name = "Anti-Aliasing",
 		description = "Configures the anti-aliasing mode",
 		position = 3
 	)
@@ -145,5 +156,46 @@ public interface GpuPluginConfig extends Config
 	default boolean brightTextures()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = "enableShadows",
+		name = "Enable Shadows",
+		description = "Draw shadows in the scene.",
+		section = shadowSection,
+		position = 1
+	)
+	default boolean enableShadows()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "shadowResolution",
+		name = "Resolution",
+		description = "Higher resolution gives higher quality shadows, but lower performance.",
+		section = shadowSection,
+		position = 3
+	)
+	default ShadowResolution shadowResolution()
+	{
+		return ShadowResolution.RES_2048x2048;
+	}
+
+	@Units(Units.PERCENT)
+	@Range(
+		min = 1,
+		max = 100
+	)
+	@ConfigItem(
+		keyName = "shadowStrength",
+		name = "Strength",
+		description = "Determines how dark shadows should be.",
+		section = shadowSection,
+		position = 5
+	)
+	default int shadowStrength()
+	{
+		return 75;
 	}
 }

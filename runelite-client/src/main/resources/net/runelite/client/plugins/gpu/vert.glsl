@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2018, Adam <Adam@sigterm.info>
+ * Copyright (c) 2021, Hooder <https://github.com/aHooder>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,17 +48,23 @@ layout(std140) uniform uniforms {
   ivec2 sinCosTable[2048];
 };
 
+uniform int renderPass;
+
 uniform float brightness;
 uniform int useFog;
 uniform int fogDepth;
 uniform int drawDistance;
 uniform mat4 projectionMatrix;
+uniform mat4 shadowProjectionMatrix;
+
+uniform bool enableShadows;
 
 out vec4 Color;
 noperspective centroid out float fHsl;
 flat out int textureId;
 out vec2 fUv;
 out float fogAmount;
+out vec4 positionLightSpace;
 
 #include hsl_to_rgb.glsl
 
@@ -69,16 +76,29 @@ void main()
 {
   ivec3 vertex = VertexPosition.xyz;
   int ahsl = VertexPosition.w;
-  int hsl = ahsl & 0xffff;
   float a = float(ahsl >> 24 & 0xff) / 255.f;
 
-  vec3 rgb = hslToRgb(hsl);
-
-  gl_Position = projectionMatrix * vec4(vertex, 1.f);
-  Color = vec4(rgb, 1.f - a);
-  fHsl = float(hsl);
   textureId = int(uv.x);
   fUv = uv.yz;
+
+  vec4 position = vec4(vertex, 1.f);
+
+  if (renderPass == 1) { // SHADOW_MAP_OPAQUE
+    // We only need alpha, texture and coordinate information for the shadow map
+    Color = vec4(vec3(0), 1.f - a);
+    gl_Position = shadowProjectionMatrix * position;
+    return;
+  }
+
+  int hsl = ahsl & 0xffff;
+  vec3 rgb = hslToRgb(hsl);
+  Color = vec4(rgb, 1.f - a);
+  fHsl = float(hsl);
+
+  gl_Position = projectionMatrix * position;
+  if (enableShadows) {
+    positionLightSpace = shadowProjectionMatrix * position;
+  }
 
   int fogWest = max(FOG_SCENE_EDGE_MIN, cameraX - drawDistance);
   int fogEast = min(FOG_SCENE_EDGE_MAX, cameraX + drawDistance - TILE_SIZE);
