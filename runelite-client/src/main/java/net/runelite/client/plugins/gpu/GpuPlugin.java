@@ -474,7 +474,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 					initVao();
 					try
 					{
-						initProgram();
+						initPrograms();
 					}
 					catch (ShaderException ex)
 					{
@@ -483,6 +483,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 					initInterfaceTexture();
 					initUniformBuffer();
 					initBuffers();
+					initDummyDepthTexture();
 
 					// Shadows require compute shaders to function due to face culling done by the client
 					if (config.enableShadows() && computeMode != ComputeMode.NONE)
@@ -561,7 +562,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 					shutdownBuffers();
 					shutdownInterfaceTexture();
-					shutdownProgram();
+					shutdownPrograms();
 					shutdownVao();
 					shutdownAAFbo();
 					shutdownDummyDepthTexture();
@@ -656,8 +657,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 						try
 						{
 							// Recompile the main program to update the generated PCF lookup function
-							shutdownProgram();
-							initProgram();
+							shutdownMainProgram();
+							initMainProgram();
 						}
 						catch (ShaderException ex)
 						{
@@ -668,8 +669,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		}
 	}
 
-	private void initProgram() throws ShaderException
+	private void initPrograms() throws ShaderException
 	{
+		initMainProgram();
+
 		String versionHeader = OSType.getOSType() == OSType.Linux ? LINUX_VERSION_HEADER : WINDOWS_VERSION_HEADER;
 		Template template = new Template();
 		template.add(key ->
@@ -678,20 +681,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			{
 				return versionHeader;
 			}
-			if ("GENERATED_SHADOW_LOOKUP".equals(key))
-			{
-				int minLimit = glGetInteger(gl, gl.GL_MIN_PROGRAM_TEXEL_OFFSET); // Always <= -8, if supported
-				int maxLimit = glGetInteger(gl, gl.GL_MAX_PROGRAM_TEXEL_OFFSET); // Always >= 7, if supported
-				return generateShadowLookupFunction(key,
-					config.shadowAntiAliasing(),
-					config.shadowResolution(),
-					minLimit, maxLimit);
-			}
 			return null;
 		});
 		template.addInclude(GpuPlugin.class);
 
-		glProgram = PROGRAM.compile(gl, template, false);
 		glUiProgram = UI_PROGRAM.compile(gl, template);
 
 		if (computeMode == ComputeMode.OPENGL)
@@ -706,7 +699,45 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		}
 
 		initUniforms();
-		initDummyDepthTexture();
+	}
+
+	private void shutdownPrograms()
+	{
+		shutdownMainProgram();
+
+		gl.glDeleteProgram(glComputeProgram);
+		glComputeProgram = -1;
+
+		gl.glDeleteProgram(glSmallComputeProgram);
+		glSmallComputeProgram = -1;
+
+		gl.glDeleteProgram(glUnorderedComputeProgram);
+		glUnorderedComputeProgram = -1;
+
+		gl.glDeleteProgram(glUiProgram);
+		glUiProgram = -1;
+	}
+
+	private void initMainProgram() throws ShaderException
+	{
+		Template template = new Template();
+		template.add(key ->
+		{
+			if ("GENERATED_SHADOW_LOOKUP".equals(key))
+			{
+				int minLimit = glGetInteger(gl, gl.GL_MIN_PROGRAM_TEXEL_OFFSET); // Always <= -8, if supported
+				int maxLimit = glGetInteger(gl, gl.GL_MAX_PROGRAM_TEXEL_OFFSET); // Always >= 7, if supported
+				return generateShadowLookupFunction(key,
+					config.shadowAntiAliasing(),
+					config.shadowResolution(),
+					minLimit, maxLimit);
+			}
+			return null;
+		});
+		template.addInclude(GpuPlugin.class);
+
+		glProgram = PROGRAM.compile(gl, template, false);
+		initMainProgramUniforms();
 
 		// Validate program
 		gl.glUseProgram(glProgram);
@@ -718,13 +749,14 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		Shader.validate(gl, glProgram);
 
 		gl.glUseProgram(0);
-		gl.glActiveTexture(GL_TEXTURE0);
 	}
 
-	private void initUniforms()
+	private void initMainProgramUniforms()
 	{
-		uniRenderPass = gl.glGetUniformLocation(glProgram, "renderPass");
+		uniTextures = gl.glGetUniformLocation(glProgram, "textures");
 		uniShadowMap = gl.glGetUniformLocation(glProgram, "shadowMap");
+
+		uniRenderPass = gl.glGetUniformLocation(glProgram, "renderPass");
 
 		uniProjectionMatrix = gl.glGetUniformLocation(glProgram, "projectionMatrix");
 		uniShadowProjectionMatrix = gl.glGetUniformLocation(glProgram, "shadowProjectionMatrix");
@@ -739,18 +771,27 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		uniEnableShadows = gl.glGetUniformLocation(glProgram, "enableShadows");
 		uniShadowStrength = gl.glGetUniformLocation(glProgram, "shadowStrength");
 
+		uniBlockMain = gl.glGetUniformBlockIndex(glProgram, "uniforms");
+	}
+
+	private void shutdownMainProgram()
+	{
+		gl.glDeleteProgram(glProgram);
+		glProgram = -1;
+	}
+
+	private void initUniforms()
+	{
 		uniTex = gl.glGetUniformLocation(glUiProgram, "tex");
 		uniTexSamplingMode = gl.glGetUniformLocation(glUiProgram, "samplingMode");
 		uniTexTargetDimensions = gl.glGetUniformLocation(glUiProgram, "targetDimensions");
 		uniTexSourceDimensions = gl.glGetUniformLocation(glUiProgram, "sourceDimensions");
 		uniUiColorBlindMode = gl.glGetUniformLocation(glUiProgram, "colorBlindMode");
 		uniUiAlphaOverlay = gl.glGetUniformLocation(glUiProgram, "alphaOverlay");
-		uniTextures = gl.glGetUniformLocation(glProgram, "textures");
 		uniTextureOffsets = gl.glGetUniformLocation(glProgram, "textureOffsets");
 
 		uniBlockSmall = gl.glGetUniformBlockIndex(glSmallComputeProgram, "uniforms");
 		uniBlockLarge = gl.glGetUniformBlockIndex(glComputeProgram, "uniforms");
-		uniBlockMain = gl.glGetUniformBlockIndex(glProgram, "uniforms");
 	}
 
 	private void initDummyDepthTexture()
@@ -771,24 +812,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	{
 		glDeleteTexture(gl, texDummyDepth);
 		texDummyDepth = 0;
-	}
-
-	private void shutdownProgram()
-	{
-		gl.glDeleteProgram(glProgram);
-		glProgram = -1;
-
-		gl.glDeleteProgram(glComputeProgram);
-		glComputeProgram = -1;
-
-		gl.glDeleteProgram(glSmallComputeProgram);
-		glSmallComputeProgram = -1;
-
-		gl.glDeleteProgram(glUnorderedComputeProgram);
-		glUnorderedComputeProgram = -1;
-
-		gl.glDeleteProgram(glUiProgram);
-		glUiProgram = -1;
 	}
 
 	private void initVao()
