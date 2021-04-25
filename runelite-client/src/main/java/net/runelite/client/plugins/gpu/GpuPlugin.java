@@ -1068,6 +1068,45 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				lastAnisotropicFilteringLevel = anisotropicFilteringLevel;
 			}
 
+			for (int id = 0; id < textures.length; ++id)
+			{
+				Texture texture = textures[id];
+				if (texture == null)
+				{
+					continue;
+				}
+
+				textureProvider.load(id); // trips the texture load flag which lets textures animate
+
+				textureOffsets[id * 2] = texture.getU();
+				textureOffsets[id * 2 + 1] = texture.getV();
+			}
+			
+			int vertexBuffer, uvBuffer;
+			if (computeMode != ComputeMode.NONE)
+			{
+				if (computeMode == ComputeMode.OPENGL)
+				{
+					// Before reading the SSBOs written to from postDrawScene() we must insert a barrier
+					gl.glMemoryBarrier(gl.GL_SHADER_STORAGE_BARRIER_BIT);
+				}
+				else
+				{
+					// Wait for the command queue to finish, so that we know the compute is done
+					openCLManager.finish();
+				}
+
+				// Draw using the output buffer of the compute
+				vertexBuffer = tmpOutBuffer.glBufferId;
+				uvBuffer = tmpOutUvBuffer.glBufferId;
+			}
+			else
+			{
+				// Only use the temporary buffers, which will contain the full scene
+				vertexBuffer = tmpVertexBuffer.glBufferId;
+				uvBuffer = tmpUvBuffer.glBufferId;
+			}
+
 			gl.glUseProgram(glProgram);
 
 			final int sky = client.getSkyboxColor();
@@ -1093,62 +1132,15 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			projectionMatrix.translate(-client.getCameraX2(), -client.getCameraY2(), -client.getCameraZ2());
 			gl.glUniformMatrix4fv(uniProjectionMatrix, 1, false, projectionMatrix.getMatrix(), 0);
 
-			for (int id = 0; id < textures.length; ++id)
-			{
-				Texture texture = textures[id];
-				if (texture == null)
-				{
-					continue;
-				}
-
-				textureProvider.load(id); // trips the texture load flag which lets textures animate
-
-				textureOffsets[id * 2] = texture.getU();
-				textureOffsets[id * 2 + 1] = texture.getV();
-			}
-
 			// Bind samplers to texture units
 			gl.glUniform1i(uniTextures, 1); // texture sampler array is bound to TEXTURE1
 
 			// Bind uniforms
 			gl.glUniformBlockBinding(glProgram, uniBlockMain, 0);
-			gl.glUniform2fv(uniTextureOffsets, textureOffsets.length, textureOffsets, 0);
-
-			// We just allow the GL to do face culling. Note this requires the priority renderer
-			// to have logic to disregard culled faces in the priority depth testing.
-			gl.glEnable(gl.GL_CULL_FACE);
-
-			// Enable blending for alpha
-			gl.glEnable(gl.GL_BLEND);
-			gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA);
+			gl.glUniform2fv(uniTextureOffsets, 128, textureOffsets, 0);
 
 			// Bind vertex and UV buffers
 			gl.glBindVertexArray(vaoHandle);
-
-			int vertexBuffer, uvBuffer;
-			if (computeMode != ComputeMode.NONE)
-			{
-				if (computeMode == ComputeMode.OPENGL)
-				{
-					// Before reading the SSBOs written to from postDrawScene() we must insert a barrier
-					gl.glMemoryBarrier(gl.GL_SHADER_STORAGE_BARRIER_BIT);
-				}
-				else
-				{
-					// Wait for the command queue to finish, so that we know the compute is done
-					openCLManager.finish();
-				}
-
-				// Draw using the output buffer of the compute
-				vertexBuffer = tmpOutBuffer.glBufferId;
-				uvBuffer = tmpOutUvBuffer.glBufferId;
-			}
-			else
-			{
-				// Only use the temporary buffers, which will contain the full scene
-				vertexBuffer = tmpVertexBuffer.glBufferId;
-				uvBuffer = tmpUvBuffer.glBufferId;
-			}
 
 			gl.glEnableVertexAttribArray(0);
 			gl.glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
@@ -1232,6 +1224,14 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			// Clear scene
 			gl.glClearColor((sky >> 16 & 0xFF) / 255f, (sky >> 8 & 0xFF) / 255f, (sky & 0xFF) / 255f, 1f);
 			gl.glClear(gl.GL_COLOR_BUFFER_BIT);
+
+			// We just allow the GL to do face culling. Note this requires the priority renderer
+			// to have logic to disregard culled faces in the priority depth testing.
+			gl.glEnable(gl.GL_CULL_FACE);
+
+			// Enable blending for alpha
+			gl.glEnable(gl.GL_BLEND);
+			gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA);
 
 			gl.glDrawArrays(gl.GL_TRIANGLES, 0, targetBufferOffset);
 
