@@ -686,6 +686,12 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 							// Recompile the main program to update the generated PCF lookup function
 							shutdownMainProgram();
 							initMainProgram();
+
+							// Update shadow map texture filtering
+							if (shadowsEnabled)
+							{
+								updateShadowMapTextureFiltering();
+							}
 						}
 						catch (ShaderException ex)
 						{
@@ -1012,7 +1018,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	private void initShadows()
 	{
 		shadowsEnabled = true;
-		shadowMap = new ShadowMap(gl, ShadowMap.Type.OPAQUE, config.shadowResolution());
+		shadowMap = new ShadowMap(gl,
+			ShadowMap.Type.OPAQUE,
+			config.shadowResolution(),
+			config.shadowAntiAliasing().getTextureFiltering());
 
 		if (config.enableShadowTranslucency())
 		{
@@ -1039,7 +1048,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	private void initShadowTranslucency()
 	{
 		shadowTranslucencyEnabled = true;
-		shadowTranslucencyMap = new ShadowMap(gl, ShadowMap.Type.TRANSLUCENT, config.shadowResolution());
+		shadowTranslucencyMap = new ShadowMap(gl,
+			ShadowMap.Type.TRANSLUCENT,
+			config.shadowResolution(),
+			config.shadowAntiAliasing().getTextureFiltering());
 	}
 
 	private void shutdownShadowTranslucency()
@@ -1059,6 +1071,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		if (shadowTranslucencyMap != null)
 		{
 			shadowTranslucencyMap.setResolution(res);
+		}
+	}
+
+	private void updateShadowMapTextureFiltering()
+	{
+		ShadowAntiAliasing shadowAntiAliasing = config.shadowAntiAliasing();
+		if (shadowMap != null)
+		{
+			shadowMap.setTextureFiltering(shadowAntiAliasing.getTextureFiltering());
+		}
+		if (shadowTranslucencyMap != null)
+		{
+			shadowTranslucencyMap.setTextureFiltering(shadowAntiAliasing.getTextureFiltering());
 		}
 	}
 
@@ -2396,7 +2421,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		float bias = texelMax * 1.5f;
 
 		String functionBody;
-		if (antiAliasing == ShadowAntiAliasing.DISABLED)
+		if (antiAliasing.getKernelSize() < 2)
 		{
 			functionBody = "texture(m, c)";
 		}

@@ -30,7 +30,6 @@ import static com.jogamp.opengl.GL.GL_DEPTH_COMPONENT16;
 import static com.jogamp.opengl.GL.GL_DRAW_FRAMEBUFFER;
 import static com.jogamp.opengl.GL.GL_FRAMEBUFFER;
 import static com.jogamp.opengl.GL.GL_GREATER;
-import static com.jogamp.opengl.GL.GL_LINEAR;
 import static com.jogamp.opengl.GL.GL_NONE;
 import static com.jogamp.opengl.GL.GL_RGB;
 import static com.jogamp.opengl.GL.GL_TEXTURE_2D;
@@ -67,17 +66,17 @@ public class ShadowMap
 	public int fbo, texDepth, texColor;
 	public int width, height;
 
-	public ShadowMap(GL4 gl, Type type, ShadowResolution resolution)
+	public ShadowMap(GL4 gl, Type type, ShadowResolution resolution, int textureFiltering)
 	{
 		this.gl = gl;
 		maxTextureSize = glGetInteger(gl, gl.GL_MAX_TEXTURE_SIZE);
 
 		fbo = glGenFrameBuffer(gl);
 
-		initDepthTexture();
+		initDepthTexture(textureFiltering);
 		if (type == Type.TRANSLUCENT)
 		{
-			initColorTexture();
+			initColorTexture(textureFiltering);
 		}
 
 		// Initialize textures with resolution
@@ -128,13 +127,29 @@ public class ShadowMap
 		}
 	}
 
+	public void setTextureFiltering(int textureFiltering)
+	{
+		if (texDepth != 0)
+		{
+			gl.glBindTexture(GL_TEXTURE_2D, texDepth);
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFiltering);
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFiltering);
+		}
+		if (texColor != 0)
+		{
+			gl.glBindTexture(GL_TEXTURE_2D, texColor);
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFiltering);
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFiltering);
+		}
+	}
+
 	public void bind()
 	{
 		gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
 		gl.glViewport(0, 0, width, height);
 	}
 
-	private void initDepthTexture()
+	private void initDepthTexture(int textureFiltering)
 	{
 		texDepth = glGenTexture(gl);
 		gl.glBindTexture(GL_TEXTURE_2D, texDepth);
@@ -145,8 +160,8 @@ public class ShadowMap
 
 		// Enable linear filtering which is effectively hardware accelerated PCF 2x2 when used with a shadow sampler
 		// Anti-aliasing settings are applied on top of this because shadow edges look a lot smoother,
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFiltering);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFiltering);
 	}
 
 	private void shutdownDepthTexture()
@@ -158,14 +173,14 @@ public class ShadowMap
 		}
 	}
 
-	private void initColorTexture()
+	private void initColorTexture(int textureFiltering)
 	{
 		texColor = glGenTexture(gl);
 		gl.glBindTexture(GL_TEXTURE_2D, texColor);
 
 		// Enable linear filtering
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFiltering);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFiltering);
 	}
 
 	private void shutdownColorTexture()

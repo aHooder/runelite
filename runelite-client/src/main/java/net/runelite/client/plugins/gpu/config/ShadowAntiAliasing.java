@@ -24,6 +24,8 @@
  */
 package net.runelite.client.plugins.gpu.config;
 
+import static com.jogamp.opengl.GL.GL_LINEAR;
+import static com.jogamp.opengl.GL.GL_NEAREST;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -31,7 +33,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ShadowAntiAliasing
 {
-	DISABLED("Disabled", 0, 0),
+	DISABLED("Disabled", 0, 0, GL_NEAREST),
+	LINEAR("Linear", 0, 0, GL_LINEAR),
 	PCF_3x3("PCF 3x3", 1, 3),
 	PCF_5x5("PCF 5x5", 1, 5),
 	PCF_7x7("PCF 7x7", 1, 7),
@@ -41,7 +44,15 @@ public enum ShadowAntiAliasing
 	PCF_21x21("PCF 21x21", 1, 21);
 
 	private final String name;
-	private final int id, kernelSize;
+	private final int id, kernelSize, textureFiltering;
+
+	ShadowAntiAliasing(String name, int id, int kernelSize)
+	{
+		this.name = name;
+		this.id = id;
+		this.kernelSize = kernelSize;
+		this.textureFiltering = GL_LINEAR;
+	}
 
 	@Override
 	public String toString()
