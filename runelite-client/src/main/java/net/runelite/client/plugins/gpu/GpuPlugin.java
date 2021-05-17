@@ -61,7 +61,6 @@ import com.jogamp.opengl.GLFBODrawable;
 import com.jogamp.opengl.GLProfile;
 import static com.jogamp.opengl.math.FloatUtil.HALF_PI;
 import static com.jogamp.opengl.math.FloatUtil.PI;
-import static com.jogamp.opengl.math.FloatUtil.QUARTER_PI;
 import static com.jogamp.opengl.math.FloatUtil.TWO_PI;
 import static com.jogamp.opengl.math.FloatUtil.abs;
 import static com.jogamp.opengl.math.FloatUtil.cos;
@@ -1520,9 +1519,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				gl.glUniform1i(uniEnableShadowTranslucency, shadowTranslucencyEnabled ? 1 : 0);
 				gl.glUniform1f(uniShadowStrength, config.shadowStrength() / 100.f);
 
-				// Hard-coded fixed shadow angles
-				shadowYaw = -QUARTER_PI;
-				shadowPitch = QUARTER_PI;
+				shadowYaw = config.shadowAngleHorizontal() / 180.f * PI;
+				shadowPitch = config.shadowAngleVertical() / 180.f * PI;
 
 				// TODO: Using the scene bounds and frustum, work out the minimal shadow projection
 

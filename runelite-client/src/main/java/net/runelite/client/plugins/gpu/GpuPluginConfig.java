@@ -223,4 +223,34 @@ public interface GpuPluginConfig extends Config
 	{
 		return 75;
 	}
+
+	@Range(
+		max = 360
+	)
+	@ConfigItem(
+		keyName = "shadowAngleHorizontal",
+		name = "Angle Horizontal",
+		description = "Controls the shadow angle in the horizontal direction.",
+		section = shadowSection,
+		position = 6
+	)
+	default int shadowAngleHorizontal()
+	{
+		return 120;
+	}
+
+	@Range(
+		max = 360
+	)
+	@ConfigItem(
+		keyName = "shadowAngleVertical",
+		name = "Angle Vertical",
+		description = "Controls the shadow angle in the vertical direction.",
+		section = shadowSection,
+		position = 7
+	)
+	default int shadowAngleVertical()
+	{
+		return 60;
+	}
 }
