@@ -95,6 +95,11 @@ void main()
   Color = vec4(rgb, 1.f - a);
   fHsl = float(hsl);
 
+  if (renderPass == 2) { // SHADOW_MAP_TRANSLUCENT
+    gl_Position = shadowProjectionMatrix * position;
+    return;
+  }
+
   gl_Position = projectionMatrix * position;
   if (enableShadows) {
     positionLightSpace = shadowProjectionMatrix * position;

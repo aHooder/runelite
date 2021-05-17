@@ -30,7 +30,9 @@ import com.google.inject.Provides;
 import com.jogamp.nativewindow.awt.AWTGraphicsConfiguration;
 import com.jogamp.nativewindow.awt.JAWTWindow;
 import com.jogamp.opengl.GL;
+import static com.jogamp.opengl.GL.GL_ALWAYS;
 import static com.jogamp.opengl.GL.GL_ARRAY_BUFFER;
+import static com.jogamp.opengl.GL.GL_COLOR_BUFFER_BIT;
 import static com.jogamp.opengl.GL.GL_CULL_FACE;
 import static com.jogamp.opengl.GL.GL_DEPTH_BUFFER_BIT;
 import static com.jogamp.opengl.GL.GL_DEPTH_COMPONENT16;
@@ -39,6 +41,8 @@ import static com.jogamp.opengl.GL.GL_DYNAMIC_DRAW;
 import static com.jogamp.opengl.GL.GL_LESS;
 import static com.jogamp.opengl.GL.GL_TEXTURE0;
 import static com.jogamp.opengl.GL.GL_TEXTURE2;
+import static com.jogamp.opengl.GL.GL_TEXTURE3;
+import static com.jogamp.opengl.GL.GL_TEXTURE4;
 import static com.jogamp.opengl.GL.GL_TEXTURE_2D;
 import static com.jogamp.opengl.GL.GL_UNSIGNED_SHORT;
 import static com.jogamp.opengl.GL2ES2.GL_COMPARE_REF_TO_TEXTURE;
@@ -188,6 +192,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	{
 		public static final int SCENE = 0;
 		public static final int SHADOW_MAP_OPAQUE = 1;
+		public static final int SHADOW_MAP_TRANSLUCENT = 2;
 	}
 
 	static class Bounds
@@ -367,12 +372,17 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	private int uniTextureLightMode;
 	private int uniRenderPass;
 	private int uniShadowMap;
+	private int uniShadowTranslucencyMap;
+	private int uniShadowTranslucencyColorTexture;
 	private int uniEnableShadows;
+	private int uniEnableShadowTranslucency;
 	private int uniShadowStrength;
 	private int uniShadowProjectionMatrix;
 
 	private boolean shadowsEnabled;
+	private boolean shadowTranslucencyEnabled;
 	private ShadowMap shadowMap;
+	private ShadowMap shadowTranslucencyMap;
 	private int texDummyDepth;
 
 	private float shadowYaw;
@@ -647,6 +657,23 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 							}
 						}
 						break;
+					case "enableShadowTranslucency":
+						if (shadowsEnabled)
+						{
+							boolean enableShadowTranslucency = config.enableShadowTranslucency();
+							if (enableShadowTranslucency != shadowTranslucencyEnabled)
+							{
+								if (enableShadowTranslucency)
+								{
+									initShadowTranslucency();
+								}
+								else
+								{
+									shutdownShadowTranslucency();
+								}
+							}
+						}
+						break;
 					case "shadowResolution":
 						if (shadowsEnabled)
 						{
@@ -745,6 +772,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		// To pass validation, sampler types that cannot share texture units need to have separate texture units bound
 		gl.glUniform1i(uniTextures, 1);
 		gl.glUniform1i(uniShadowMap, 2);
+		gl.glUniform1i(uniShadowTranslucencyMap, 3);
+		gl.glUniform1i(uniShadowTranslucencyColorTexture, 4);
 
 		Shader.validate(gl, glProgram);
 
@@ -755,6 +784,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	{
 		uniTextures = gl.glGetUniformLocation(glProgram, "textures");
 		uniShadowMap = gl.glGetUniformLocation(glProgram, "shadowMap");
+		uniShadowTranslucencyMap = gl.glGetUniformLocation(glProgram, "shadowTranslucencyMap");
+		uniShadowTranslucencyColorTexture = gl.glGetUniformLocation(glProgram, "shadowTranslucencyColorTexture");
 
 		uniRenderPass = gl.glGetUniformLocation(glProgram, "renderPass");
 
@@ -769,6 +800,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		uniColorBlindMode = gl.glGetUniformLocation(glProgram, "colorBlindMode");
 		uniTextureLightMode = gl.glGetUniformLocation(glProgram, "textureLightMode");
 		uniEnableShadows = gl.glGetUniformLocation(glProgram, "enableShadows");
+		uniEnableShadowTranslucency = gl.glGetUniformLocation(glProgram, "enableShadowTranslucency");
 		uniShadowStrength = gl.glGetUniformLocation(glProgram, "shadowStrength");
 
 		uniBlockMain = gl.glGetUniformBlockIndex(glProgram, "uniforms");
@@ -981,6 +1013,11 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	{
 		shadowsEnabled = true;
 		shadowMap = new ShadowMap(gl, ShadowMap.Type.OPAQUE, config.shadowResolution());
+
+		if (config.enableShadowTranslucency())
+		{
+			initShadowTranslucency();
+		}
 	}
 
 	private void shutdownShadows()
@@ -992,12 +1029,37 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			shadowMap.shutdown();
 			shadowMap = null;
 		}
+
+		if (shadowTranslucencyEnabled)
+		{
+			shutdownShadowTranslucency();
+		}
+	}
+
+	private void initShadowTranslucency()
+	{
+		shadowTranslucencyEnabled = true;
+		shadowTranslucencyMap = new ShadowMap(gl, ShadowMap.Type.TRANSLUCENT, config.shadowResolution());
+	}
+
+	private void shutdownShadowTranslucency()
+	{
+		shadowTranslucencyEnabled = false;
+		shadowTranslucencyMap.shutdown();
+		shadowTranslucencyMap = null;
 	}
 
 	private void resizeShadowMaps()
 	{
 		ShadowResolution res = config.shadowResolution();
-		shadowMap.setResolution(res);
+		if (shadowMap != null)
+		{
+			shadowMap.setResolution(res);
+		}
+		if (shadowTranslucencyMap != null)
+		{
+			shadowTranslucencyMap.setResolution(res);
+		}
 	}
 
 	@Override
@@ -1382,6 +1444,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			// Bind samplers to texture units
 			gl.glUniform1i(uniTextures, 1); // texture sampler array is bound to TEXTURE1
 			gl.glUniform1i(uniShadowMap, 2);
+			gl.glUniform1i(uniShadowTranslucencyMap, 3);
+			gl.glUniform1i(uniShadowTranslucencyColorTexture, 4);
 
 			// Bind uniforms
 			gl.glUniformBlockBinding(glProgram, uniBlockMain, 0);
@@ -1399,14 +1463,36 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			gl.glBindBuffer(GL_ARRAY_BUFFER, uvBuffer);
 			gl.glVertexAttribPointer(1, 4, gl.GL_FLOAT, false, 0, 0);
 
+			if (!shadowTranslucencyEnabled)
+			{
+				// Bind dummy map to the shadow sampler's texture unit to ensure valid state
+				gl.glActiveTexture(GL_TEXTURE3);
+				gl.glBindTexture(GL_TEXTURE_2D, texDummyDepth);
+
+				// Unbind translucency color texture
+				gl.glActiveTexture(GL_TEXTURE4);
+				gl.glBindTexture(GL_TEXTURE_2D, 0);
+			}
+			else
+			{
+				// Bind the shadow translucency map to TEXTURE3 prior to rendering to ensure valid state
+				gl.glActiveTexture(GL_TEXTURE3);
+				gl.glBindTexture(GL_TEXTURE_2D, shadowTranslucencyMap.texDepth);
+
+				// Bind the shadow translucency color texture to TEXTURE4
+				gl.glActiveTexture(GL_TEXTURE4);
+				gl.glBindTexture(GL_TEXTURE_2D, shadowTranslucencyMap.texColor);
+			}
+
 			if (!shadowsEnabled)
 			{
-				// Bind dummy map to the shadow sampler's texture unit
+				// Bind dummy map to the shadow sampler's texture unit to ensure valid state
 				gl.glActiveTexture(GL_TEXTURE2);
 				gl.glBindTexture(GL_TEXTURE_2D, texDummyDepth);
 			}
 			else
 			{
+				gl.glUniform1i(uniEnableShadowTranslucency, shadowTranslucencyEnabled ? 1 : 0);
 				gl.glUniform1f(uniShadowStrength, config.shadowStrength() / 100.f);
 
 				// Hard-coded fixed shadow angles
@@ -1460,7 +1546,11 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 				gl.glEnable(GL_CULL_FACE);
 
-				// Ready for the shadow mapping render pass
+				// Bind the shadow map texture to TEXTURE2 prior to rendering to ensure valid state
+				gl.glActiveTexture(GL_TEXTURE2);
+				gl.glBindTexture(GL_TEXTURE_2D, shadowMap.texDepth);
+
+				// Render to the shadow map for opaque objects
 				gl.glUniform1i(uniRenderPass, RenderPass.SHADOW_MAP_OPAQUE);
 
 				// Bind FBO and initialise viewport
@@ -1473,13 +1563,50 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				// Draw depth information to the shadow map
 				gl.glDrawArrays(gl.GL_TRIANGLES, 0, targetBufferOffset);
 
-				// Bind the shadow map texture to TEXTURE2
-				gl.glActiveTexture(GL_TEXTURE2);
-				gl.glBindTexture(GL_TEXTURE_2D, shadowMap.texDepth);
+				if (shadowTranslucencyEnabled)
+				{
+					// Render to the shadow map for translucent objects
+					gl.glUniform1i(uniRenderPass, RenderPass.SHADOW_MAP_TRANSLUCENT);
+
+					// Bind FBO and initialise viewport
+					shadowTranslucencyMap.bind();
+
+					// Clear depth and color information
+					gl.glClearDepth(1);
+					gl.glClearColor(1, 1, 1, 1);
+					gl.glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+					// Blend colors by multiplying SRC_COLOR with DST_COLOR
+					gl.glEnable(gl.GL_BLEND);
+					gl.glBlendFunc(gl.GL_DST_COLOR, gl.GL_ZERO);
+
+					// We want all translucent fragments to contribute to the final color,
+					// so we set the depth function to GL_ALWAYS so as to not discard any fragments.
+					// Note: The written depth value will be whichever translucent fragment is drawn
+					// last for each pixel. Normally this would be bad since the order isn't known,
+					// but because we only cast shadows from translucent fragments onto opaque
+					// fragments, most of the time it's safe to assume that the depth value is in
+					// front of the opaque fragment, although with translucent fragments
+					// on both sides of an opaque fragment, this might still fail. In the case
+					// where a translucent fragment lies after an opaque one, the fragment will
+					// already be in shadow.
+					gl.glDepthFunc(GL_ALWAYS);
+
+					// Allow both sides of models to affect the shadow color
+					gl.glDisable(GL_CULL_FACE);
+
+					// Draw depth and color information to the shadow map FBO
+					gl.glDrawArrays(gl.GL_TRIANGLES, 0, targetBufferOffset);
+
+					// Reset
+					gl.glDepthFunc(gl.GL_LESS);
+					gl.glDisable(gl.GL_BLEND);
+				}
 
 				// Reset
 				gl.glDisable(GL_DEPTH_TEST);
 			}
+
 			gl.glActiveTexture(GL_TEXTURE0);
 
 			// Ready for the SCENE render pass

@@ -24,6 +24,7 @@
  */
 package net.runelite.client.plugins.gpu;
 
+import static com.jogamp.opengl.GL.GL_COLOR_ATTACHMENT0;
 import static com.jogamp.opengl.GL.GL_DEPTH_ATTACHMENT;
 import static com.jogamp.opengl.GL.GL_DEPTH_COMPONENT16;
 import static com.jogamp.opengl.GL.GL_DRAW_FRAMEBUFFER;
@@ -31,14 +32,17 @@ import static com.jogamp.opengl.GL.GL_FRAMEBUFFER;
 import static com.jogamp.opengl.GL.GL_GREATER;
 import static com.jogamp.opengl.GL.GL_LINEAR;
 import static com.jogamp.opengl.GL.GL_NONE;
+import static com.jogamp.opengl.GL.GL_RGB;
 import static com.jogamp.opengl.GL.GL_TEXTURE_2D;
 import static com.jogamp.opengl.GL.GL_TEXTURE_MAG_FILTER;
 import static com.jogamp.opengl.GL.GL_TEXTURE_MIN_FILTER;
+import static com.jogamp.opengl.GL.GL_UNSIGNED_BYTE;
 import static com.jogamp.opengl.GL.GL_UNSIGNED_SHORT;
 import static com.jogamp.opengl.GL2ES2.GL_COMPARE_REF_TO_TEXTURE;
 import static com.jogamp.opengl.GL2ES2.GL_DEPTH_COMPONENT;
 import static com.jogamp.opengl.GL2ES2.GL_TEXTURE_COMPARE_FUNC;
 import static com.jogamp.opengl.GL2ES2.GL_TEXTURE_COMPARE_MODE;
+import static com.jogamp.opengl.GL2GL3.GL_RGB4;
 import com.jogamp.opengl.GL4;
 import lombok.extern.slf4j.Slf4j;
 import static net.runelite.client.plugins.gpu.GLUtil.glDeleteFrameBuffer;
@@ -56,10 +60,11 @@ public class ShadowMap
 
 	public enum Type
 	{
-		OPAQUE
+		OPAQUE,
+		TRANSLUCENT
 	}
 
-	public int fbo, texDepth;
+	public int fbo, texDepth, texColor;
 	public int width, height;
 
 	public ShadowMap(GL4 gl, Type type, ShadowResolution resolution)
@@ -70,6 +75,10 @@ public class ShadowMap
 		fbo = glGenFrameBuffer(gl);
 
 		initDepthTexture();
+		if (type == Type.TRANSLUCENT)
+		{
+			initColorTexture();
+		}
 
 		// Initialize textures with resolution
 		setResolution(resolution);
@@ -77,10 +86,16 @@ public class ShadowMap
 		// Bind the texture as a depth attachment to the FBO
 		gl.glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 		gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texDepth, 0);
-
-		// We're only using the depth attachment, so disable draw & read for color attachments
-		gl.glDrawBuffer(GL_NONE);
-		gl.glReadBuffer(GL_NONE);
+		if (type == Type.TRANSLUCENT)
+		{
+			gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texColor, 0);
+		}
+		else
+		{
+			// We're only using the depth attachment, so disable draw & read for color attachments
+			gl.glDrawBuffer(GL_NONE);
+			gl.glReadBuffer(GL_NONE);
+		}
 
 		gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
@@ -93,6 +108,7 @@ public class ShadowMap
 			fbo = 0;
 		}
 		shutdownDepthTexture();
+		shutdownColorTexture();
 	}
 
 	public void setResolution(ShadowResolution resolution)
@@ -103,6 +119,12 @@ public class ShadowMap
 			gl.glBindTexture(GL_TEXTURE_2D, texDepth);
 			gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, width, height, 0,
 				GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, null);
+		}
+		if (texColor != 0)
+		{
+			gl.glBindTexture(GL_TEXTURE_2D, texColor);
+			gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB4, width, height, 0,
+				GL_RGB, GL_UNSIGNED_BYTE, null);
 		}
 	}
 
@@ -133,6 +155,25 @@ public class ShadowMap
 		{
 			glDeleteTexture(gl, texDepth);
 			texDepth = 0;
+		}
+	}
+
+	private void initColorTexture()
+	{
+		texColor = glGenTexture(gl);
+		gl.glBindTexture(GL_TEXTURE_2D, texColor);
+
+		// Enable linear filtering
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	}
+
+	private void shutdownColorTexture()
+	{
+		if (texColor != 0)
+		{
+			glDeleteTexture(gl, texColor);
+			texColor = 0;
 		}
 	}
 

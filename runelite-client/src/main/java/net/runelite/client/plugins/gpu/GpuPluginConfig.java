@@ -172,6 +172,18 @@ public interface GpuPluginConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "enableShadowTranslucency",
+		name = "Enable Translucency",
+		description = "Let light pass through translucent objects. Can have a large performance impact.",
+		section = shadowSection,
+		position = 2
+	)
+	default boolean enableShadowTranslucency()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "shadowResolution",
 		name = "Resolution",
 		description = "Higher resolution gives higher quality shadows, but lower performance.",

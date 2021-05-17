@@ -36,7 +36,33 @@ vec4 applyShadows(vec4 c) {
   }
 
   float shadow = GENERATED_SHADOW_LOOKUP(shadowMap, coords);
-  c.rgb *= 1.f - shadow * shadowStrength;
+
+  vec3 result = c.rgb * (1.f - shadow);
+
+  if (enableShadowTranslucency && shadow < 1.f) {
+    // Skip fragments that aren't opaque to work around an issue where all translucent objects
+    // that receive shadow share the same shadow colors, meaning colors from fragments behind
+    // get projected onto the shadow of fragments in front. Opaque fragments don't suffer from
+    // this because of the separate shading step. To properly solve this for translucent fragments
+    // a controlled render order and different blend function is required.
+    if (c.a < .99f) {
+      return c;
+    }
+
+    float shadowTranslucency = GENERATED_SHADOW_LOOKUP(shadowTranslucencyMap, coords);
+    // Prevent duplicate shadows resulting in too dark shadows
+//    shadowTranslucency *= 1.f - shadow;
+
+    if (shadowTranslucency > 0.f) {
+      vec4 shadowColor = texture(shadowTranslucencyColorTexture, coords.xy);
+      // Because light passes through both sides, take the square root of the color
+      shadowColor.rgb = sqrt(shadowColor.rgb);
+      result *= shadowColor.rgb;
+    }
+  }
+
+  // Blend between the resulting shadow color and the normal color based on shadow strength
+  c.rgb = mix(c.rgb, result, shadowStrength);
 
   return c;
 }

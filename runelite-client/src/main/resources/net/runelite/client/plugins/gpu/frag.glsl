@@ -27,6 +27,8 @@
 
 uniform sampler2DArray textures;
 uniform sampler2DShadow shadowMap;
+uniform sampler2DShadow shadowTranslucencyMap;
+uniform sampler2D shadowTranslucencyColorTexture;
 
 uniform int renderPass;
 
@@ -38,6 +40,7 @@ uniform int colorBlindMode;
 uniform float textureLightMode;
 
 uniform bool enableShadows;
+uniform bool enableShadowTranslucency;
 uniform float shadowStrength;
 
 in vec4 Color;
@@ -88,12 +91,34 @@ void main() {
       FragColor = vec4(mixedColor, c.a);
       break;
     case 1: // SHADOW_MAP_OPAQUE
-      // Let light pass through very translucent fragments, such as glass.
-      // .12 doesn't produce flickering shadows for portals, while letting
-      // light pass through very translucent glass.
-      if (c.a < .12f) {
+      if (enableShadowTranslucency) {
+        // Discard all non-opaque fragments
+        if (c.a < .99f) {
+          discard;
+        }
+      } else {
+        // Let light pass through very translucent fragments, such as glass.
+        // .12 doesn't produce flickering shadows for portals, while letting
+        // light pass through very translucent glass.
+        if (c.a < .12f) {
+          discard;
+        }
+      }
+
+      // gl_FragDepth is written to automatically
+      break;
+    case 2: // SHADOW_MAP_TRANSLUCENT
+      // Discard all opaque fragments, and all essentially invisible fragments
+      // which are sometimes used by clickboxes and textured objects
+      if (c.a >= .99f || c.a < .01f) {
         discard;
       }
+
+      // Heavily bias the alpha value in order to produce some nicer looking translucent shadows
+      c.a = pow(c.a, 10.f);
+
+      // Output the color premultiplied with opacity, making the color darker the greater its opacity
+      FragColor.rgb = c.rgb * (1.f - c.a);
 
       // gl_FragDepth is written to automatically
       break;
