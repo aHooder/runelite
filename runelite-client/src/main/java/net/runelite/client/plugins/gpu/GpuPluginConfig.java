@@ -35,6 +35,7 @@ import static net.runelite.client.plugins.gpu.GpuPlugin.MAX_DISTANCE;
 import static net.runelite.client.plugins.gpu.GpuPlugin.MAX_FOG_DEPTH;
 import net.runelite.client.plugins.gpu.config.AntiAliasingMode;
 import net.runelite.client.plugins.gpu.config.ColorBlindMode;
+import net.runelite.client.plugins.gpu.config.ShadowAntiAliasing;
 import net.runelite.client.plugins.gpu.config.ShadowResolution;
 import net.runelite.client.plugins.gpu.config.UIScalingMode;
 
@@ -180,6 +181,18 @@ public interface GpuPluginConfig extends Config
 	default ShadowResolution shadowResolution()
 	{
 		return ShadowResolution.RES_2048x2048;
+	}
+
+	@ConfigItem(
+		keyName = "shadowAntiAliasing",
+		name = "Anti-Aliasing",
+		description = "Smoothing of shadow edges. High values have a considerable performance impact.",
+		section = shadowSection,
+		position = 4
+	)
+	default ShadowAntiAliasing shadowAntiAliasing()
+	{
+		return ShadowAntiAliasing.PCF_3x3;
 	}
 
 	@Units(Units.PERCENT)

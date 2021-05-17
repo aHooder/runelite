@@ -120,6 +120,7 @@ import static net.runelite.client.plugins.gpu.GLUtil.glGenTexture;
 import static net.runelite.client.plugins.gpu.GLUtil.glGenVertexArrays;
 import static net.runelite.client.plugins.gpu.GLUtil.glGetInteger;
 import net.runelite.client.plugins.gpu.config.AntiAliasingMode;
+import net.runelite.client.plugins.gpu.config.ShadowAntiAliasing;
 import net.runelite.client.plugins.gpu.config.ShadowResolution;
 import net.runelite.client.plugins.gpu.config.UIScalingMode;
 import net.runelite.client.plugins.gpu.template.Template;
@@ -650,7 +651,18 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 						{
 							resizeShadowMaps();
 						}
-						break;
+						// Fallthrough
+					case "shadowAntiAliasing":
+						try
+						{
+							// Recompile the main program to update the generated PCF lookup function
+							shutdownProgram();
+							initProgram();
+						}
+						catch (ShaderException ex)
+						{
+							throw new RuntimeException(ex);
+						}
 				}
 			}));
 		}
@@ -665,6 +677,15 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			if ("version_header".equals(key))
 			{
 				return versionHeader;
+			}
+			if ("GENERATED_SHADOW_LOOKUP".equals(key))
+			{
+				int minLimit = glGetInteger(gl, gl.GL_MIN_PROGRAM_TEXEL_OFFSET); // Always <= -8, if supported
+				int maxLimit = glGetInteger(gl, gl.GL_MAX_PROGRAM_TEXEL_OFFSET); // Always >= 7, if supported
+				return generateShadowLookupFunction(key,
+					config.shadowAntiAliasing(),
+					config.shadowResolution(),
+					minLimit, maxLimit);
 			}
 			return null;
 		});
@@ -2194,5 +2215,118 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	{
 		SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
 			jawtWindow.getAWTComponent(), message, "GPU Plugin Error", JOptionPane.ERROR_MESSAGE));
+	}
+
+	/**
+	 * Due to possible GPU compiler limitations, generate the shadow map look-up function
+	 * instead of relying on the compiler to unroll our loops. In addition this makes it
+	 * easier to take advantage of textureOffset when possible.
+	 *
+	 * @param functionName A valid GLSL function name
+	 * @param antiAliasing The currently configured shadow anti-aliasing mode
+	 * @param shadowResolution The currently configured shadow resolution
+	 * @param glMinProgramTexelOffset The OpenGL minimum texel offset, GL_MIN_PROGRAM_TEXEL_OFFSET
+	 * @param glMaxProgramTexelOffset The OpenGL maximum texel offset, GL_MAX_PROGRAM_TEXEL_OFFSET
+	 * @return The source code shadow map sampling with the currently anti-aliasing mode
+	 */
+	static String generateShadowLookupFunction(
+		String functionName,
+		ShadowAntiAliasing antiAliasing,
+		ShadowResolution shadowResolution,
+		int glMinProgramTexelOffset,
+		int glMaxProgramTexelOffset
+	)
+	{
+		// Apply a bias to prevent self-shadowing
+		float texelX = 1.f / shadowResolution.getWidth();
+		float texelY = 1.f / shadowResolution.getHeight();
+		float texelMax = Math.max(texelX, texelY);
+
+		// TODO: Arbitrary formula that should be improved by adding face normals
+		float bias = texelMax * 1.5f;
+
+		String functionBody;
+		if (antiAliasing == ShadowAntiAliasing.DISABLED)
+		{
+			functionBody = "texture(m, c)";
+		}
+		else if (antiAliasing.getId() == ShadowAntiAliasing.PCF_3x3.getId())
+		{
+			int kernelSize = antiAliasing.getKernelSize();
+			int min = -kernelSize / 2;
+			int max = kernelSize / 2;
+			if (kernelSize % 2 == 0)
+			{
+				max--;
+			}
+
+			bias += texelMax * (kernelSize / 2); // Apply some additional bias
+
+			final String slowLookup = "texture(m,c+vec3(";
+			final String fastLookup = "textureOffset(m,c,ivec2(";
+
+			int squared = kernelSize * kernelSize;
+
+			// Initialize capacity to only fast look-ups
+			StringBuilder sb = new StringBuilder(String.valueOf(squared).length() + 4 +
+				(fastLookup.length() + String.valueOf(min).length() * 2 + 4) * squared);
+
+			sb.append('(');
+
+			// Use slower look-ups outside supported textureOffset range
+			for (int x = min; x <= max; x++)
+			{
+				// Bottom slice
+				for (int y = min; y < glMinProgramTexelOffset; y++)
+				{
+					sb.append(slowLookup).append(x * texelX).append(",").append(y * texelY).append(",0))").append('+');
+				}
+
+				// Top slice
+				for (int y = max; y > glMaxProgramTexelOffset; y--)
+				{
+					sb.append(slowLookup).append(x * texelX).append(",").append(y * texelY).append(",0))").append('+');
+				}
+			}
+
+			for (int y = glMinProgramTexelOffset; y < glMaxProgramTexelOffset; y++)
+			{
+				// Left slice excluding corners
+				for (int x = min; x < glMinProgramTexelOffset; x++)
+				{
+					sb.append(slowLookup).append(x * texelX).append(",").append(y * texelY).append(",0))").append('+');
+				}
+
+				// Right slice excluding corners
+				for (int x = max; x > glMaxProgramTexelOffset; x--)
+				{
+					sb.append(slowLookup).append(x * texelX).append(",").append(y * texelY).append(",0))").append('+');
+				}
+			}
+
+			int fastMin = Math.max(min, glMinProgramTexelOffset);
+			int fastMax = Math.min(max, glMaxProgramTexelOffset);
+
+			// High performance look-ups
+			for (int y = fastMin; y <= fastMax; y++)
+			{
+				for (int x = fastMin; x <= fastMax; x++)
+				{
+					sb.append(fastLookup).append(x).append(',').append(y).append("))").append('+');
+				}
+			}
+
+			sb.deleteCharAt(sb.length() - 1);
+			sb.append(")/").append(squared).append(".f");
+			functionBody = sb.toString();
+		}
+		else
+		{
+			// If the selected anti-aliasing mode hasn't been implemented,
+			// render shadows everywhere to make it easier to notice
+			functionBody = "1.f";
+		}
+
+		return "float " + functionName + "(sampler2DShadow m, vec3 c) { c.z -= " + bias + "; return " + functionBody + "; }";
 	}
 }

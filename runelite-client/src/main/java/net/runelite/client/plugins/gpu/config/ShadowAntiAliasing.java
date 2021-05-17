@@ -22,21 +22,30 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include GENERATED_SHADOW_LOOKUP
+package net.runelite.client.plugins.gpu.config;
 
-vec4 applyShadows(vec4 c) {
-  // Get the fragment position in light space in the range 0 to 1
-  vec3 coords = positionLightSpace.xyz / positionLightSpace.w * .5f + .5f;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
-  // Return early if the point lies outside the shadow map texture to avoid unnecessary lookups
-  if (coords.x < 0.f || coords.x > 1.f ||
-      coords.y < 0.f || coords.y > 1.f ||
-      coords.z < 0.f || coords.z > 1.f) {
-    return c;
-  }
+@Getter
+@RequiredArgsConstructor
+public enum ShadowAntiAliasing
+{
+	DISABLED("Disabled", 0, 0),
+	PCF_3x3("PCF 3x3", 1, 3),
+	PCF_5x5("PCF 5x5", 1, 5),
+	PCF_7x7("PCF 7x7", 1, 7),
+	PCF_9x9("PCF 9x9", 1, 9),
+	PCF_11x11("PCF 11x11", 1, 11),
+	PCF_15x15("PCF 15x15", 1, 15),
+	PCF_21x21("PCF 21x21", 1, 21);
 
-  float shadow = GENERATED_SHADOW_LOOKUP(shadowMap, coords);
-  c.rgb *= 1.f - shadow * shadowStrength;
+	private final String name;
+	private final int id, kernelSize;
 
-  return c;
+	@Override
+	public String toString()
+	{
+		return name;
+	}
 }
