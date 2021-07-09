@@ -31,6 +31,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ShadowResolution
 {
+	// TODO: these low resolutions are just for debugging
+	RES_3x3("3x3", 3, 3),
+	RES_5x5("5x5", 5, 5),
+	RES_10x10("10x10", 10, 10),
+	RES_64x64("64x64", 64, 64),
 	RES_1024x1024("1024x1024", 1024, 1024),
 	RES_2048x2048("2048x2048", 2048, 2048),
 	RES_4096x4096("4096x4096", 4096, 4096),

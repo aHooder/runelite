@@ -26,32 +26,50 @@ package net.runelite.client.plugins.gpu.config;
 
 import static com.jogamp.opengl.GL.GL_LINEAR;
 import static com.jogamp.opengl.GL.GL_NEAREST;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-@Getter
 @RequiredArgsConstructor
 public enum ShadowAntiAliasing
 {
-	DISABLED("Disabled", 0, 0, GL_NEAREST),
-	LINEAR("Linear", 0, 0, GL_LINEAR),
-	PCF_3x3("PCF 3x3", 1, 3),
-	PCF_5x5("PCF 5x5", 1, 5),
-	PCF_7x7("PCF 7x7", 1, 7),
-	PCF_9x9("PCF 9x9", 1, 9),
-	PCF_11x11("PCF 11x11", 1, 11),
-	PCF_15x15("PCF 15x15", 1, 15),
-	PCF_21x21("PCF 21x21", 1, 21);
+	NONE("None", Technique.NONE, false, 0),
+	LINEAR("Linear", Technique.NONE, true, 0),
+	PCF_3("PCF 3x3", Technique.PCF, true, 3),
+	PCF_5("PCF 5x5", Technique.PCF, true, 5),
+	PCF_7("PCF 7x7", Technique.PCF, true, 7),
+	PCF_9("PCF 9x9", Technique.PCF, true, 9),
+	PCF_11("PCF 11x11", Technique.PCF, true, 11),
+	PCF_15("PCF 15x15", Technique.PCF, true, 15),
+	PCF_21("PCF 21x21", Technique.PCF, true, 21),
+	PCSS_4("PCSS 4x4", Technique.PCSS, false, 4),
+	PCSS_16("PCSS 16x16", Technique.PCSS, false, 16),
+	PCSS_32("PCSS 32x32", Technique.PCSS, false, 32),
+	PCSS_64("PCSS 64x64", Technique.PCSS, false, 64),
+	PCSS_128("PCSS 128x128", Technique.PCSS, false, 128),
+	PCSS_256("PCSS 256x256", Technique.PCSS, false, 256);
 
 	private final String name;
-	private final int id, kernelSize, textureFiltering;
+	public final Technique technique;
+	public final boolean useLinearFiltering;
+	public final int kernelSize;
 
-	ShadowAntiAliasing(String name, int id, int kernelSize)
+	@RequiredArgsConstructor
+	public enum Technique
 	{
-		this.name = name;
-		this.id = id;
-		this.kernelSize = kernelSize;
-		this.textureFiltering = GL_LINEAR;
+		NONE(0),
+		PCF(1),
+		PCSS(2);
+
+		public final int id;
+	}
+
+	public int getTextureFilteringMode()
+	{
+		return useLinearFiltering ? GL_LINEAR : GL_NEAREST;
+	}
+
+	public boolean useShadowSampler()
+	{
+		return technique != Technique.PCSS;
 	}
 
 	@Override

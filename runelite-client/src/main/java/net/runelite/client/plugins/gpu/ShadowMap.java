@@ -26,7 +26,6 @@ package net.runelite.client.plugins.gpu;
 
 import static com.jogamp.opengl.GL.GL_COLOR_ATTACHMENT0;
 import static com.jogamp.opengl.GL.GL_DEPTH_ATTACHMENT;
-import static com.jogamp.opengl.GL.GL_DEPTH_COMPONENT16;
 import static com.jogamp.opengl.GL.GL_DRAW_FRAMEBUFFER;
 import static com.jogamp.opengl.GL.GL_FRAMEBUFFER;
 import static com.jogamp.opengl.GL.GL_GREATER;
@@ -35,12 +34,17 @@ import static com.jogamp.opengl.GL.GL_RGB;
 import static com.jogamp.opengl.GL.GL_TEXTURE_2D;
 import static com.jogamp.opengl.GL.GL_TEXTURE_MAG_FILTER;
 import static com.jogamp.opengl.GL.GL_TEXTURE_MIN_FILTER;
+import static com.jogamp.opengl.GL.GL_TEXTURE_WRAP_S;
+import static com.jogamp.opengl.GL.GL_TEXTURE_WRAP_T;
 import static com.jogamp.opengl.GL.GL_UNSIGNED_BYTE;
 import static com.jogamp.opengl.GL.GL_UNSIGNED_SHORT;
+import static com.jogamp.opengl.GL2ES2.GL_CLAMP_TO_BORDER;
 import static com.jogamp.opengl.GL2ES2.GL_COMPARE_REF_TO_TEXTURE;
 import static com.jogamp.opengl.GL2ES2.GL_DEPTH_COMPONENT;
+import static com.jogamp.opengl.GL2ES2.GL_TEXTURE_BORDER_COLOR;
 import static com.jogamp.opengl.GL2ES2.GL_TEXTURE_COMPARE_FUNC;
 import static com.jogamp.opengl.GL2ES2.GL_TEXTURE_COMPARE_MODE;
+import static com.jogamp.opengl.GL2ES3.GL_DEPTH_COMPONENT32F;
 import static com.jogamp.opengl.GL2GL3.GL_RGB4;
 import com.jogamp.opengl.GL4;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +53,7 @@ import static net.runelite.client.plugins.gpu.GLUtil.glDeleteTexture;
 import static net.runelite.client.plugins.gpu.GLUtil.glGenFrameBuffer;
 import static net.runelite.client.plugins.gpu.GLUtil.glGenTexture;
 import static net.runelite.client.plugins.gpu.GLUtil.glGetInteger;
+import net.runelite.client.plugins.gpu.config.ShadowAntiAliasing;
 import net.runelite.client.plugins.gpu.config.ShadowResolution;
 
 @Slf4j
@@ -66,17 +71,31 @@ public class ShadowMap
 	public int fbo, texDepth, texColor;
 	public int width, height;
 
-	public ShadowMap(GL4 gl, Type type, ShadowResolution resolution, int textureFiltering)
+	final float[] borderColor = { 1.0f, 1.0f, 0.0f, 1.0f };
+
+	public ShadowMap(GL4 gl, Type type, ShadowResolution resolution, ShadowAntiAliasing antiAliasing, boolean useShadowSampler)
 	{
 		this.gl = gl;
 		maxTextureSize = glGetInteger(gl, gl.GL_MAX_TEXTURE_SIZE);
 
 		fbo = glGenFrameBuffer(gl);
 
-		initDepthTexture(textureFiltering);
+		texDepth = glGenTexture(gl);
+		gl.glBindTexture(GL_TEXTURE_2D, texDepth);
+
+		setSamplerMode(useShadowSampler);
+
+		int filteringMode = antiAliasing.getTextureFilteringMode();
+
+		applyFilteringModeToBoundTexture(filteringMode);
+		applyBorderClampingToBoundTexture();
+
 		if (type == Type.TRANSLUCENT)
 		{
-			initColorTexture(textureFiltering);
+			texColor = glGenTexture(gl);
+			gl.glBindTexture(GL_TEXTURE_2D, texColor);
+			applyFilteringModeToBoundTexture(filteringMode);
+			applyBorderClampingToBoundTexture();
 		}
 
 		// Initialize textures with resolution
@@ -116,7 +135,7 @@ public class ShadowMap
 		if (texDepth != 0)
 		{
 			gl.glBindTexture(GL_TEXTURE_2D, texDepth);
-			gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, width, height, 0,
+			gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0,
 				GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, null);
 		}
 		if (texColor != 0)
@@ -143,25 +162,25 @@ public class ShadowMap
 		}
 	}
 
+	public void setSamplerMode(boolean useShadowSampler)
+	{
+		gl.glBindTexture(GL_TEXTURE_2D, texDepth);
+		if (useShadowSampler)
+		{
+			// Enable depth comparison for use with shadow2DSampler
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_GREATER);
+		}
+		else
+		{
+			gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+		}
+	}
+
 	public void bind()
 	{
 		gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
 		gl.glViewport(0, 0, width, height);
-	}
-
-	private void initDepthTexture(int textureFiltering)
-	{
-		texDepth = glGenTexture(gl);
-		gl.glBindTexture(GL_TEXTURE_2D, texDepth);
-
-		// Enable depth comparison for use with shadow2DSampler
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_GREATER);
-
-		// Enable linear filtering which is effectively hardware accelerated PCF 2x2 when used with a shadow sampler
-		// Anti-aliasing settings are applied on top of this because shadow edges look a lot smoother,
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFiltering);
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFiltering);
 	}
 
 	private void shutdownDepthTexture()
@@ -171,16 +190,6 @@ public class ShadowMap
 			glDeleteTexture(gl, texDepth);
 			texDepth = 0;
 		}
-	}
-
-	private void initColorTexture(int textureFiltering)
-	{
-		texColor = glGenTexture(gl);
-		gl.glBindTexture(GL_TEXTURE_2D, texColor);
-
-		// Enable linear filtering
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, textureFiltering);
-		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, textureFiltering);
 	}
 
 	private void shutdownColorTexture()
@@ -202,5 +211,18 @@ public class ShadowMap
 			log.debug("Can't apply selected shadow resolution: {}x{}. Using {}x{} instead.",
 				resolution.getWidth(), resolution.getHeight(), width, height);
 		}
+	}
+
+	private void applyFilteringModeToBoundTexture(int filteringMode)
+	{
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filteringMode);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filteringMode);
+	}
+
+	private void applyBorderClampingToBoundTexture()
+	{
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+		gl.glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor, 0);
 	}
 }

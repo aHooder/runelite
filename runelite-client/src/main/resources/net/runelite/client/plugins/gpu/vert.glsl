@@ -33,6 +33,8 @@
 #define FOG_CORNER_ROUNDING 1.5
 #define FOG_CORNER_ROUNDING_SQUARED FOG_CORNER_ROUNDING * FOG_CORNER_ROUNDING
 
+#include SHADOW_CONSTANTS
+
 layout (location = 0) in ivec4 VertexPosition;
 layout (location = 1) in vec4 uv;
 
@@ -57,14 +59,18 @@ uniform int drawDistance;
 uniform mat4 projectionMatrix;
 uniform mat4 shadowProjectionMatrix;
 
-uniform bool enableShadows;
+out VertexData {
+  vec4 Color;
+  noperspective centroid float fHsl;
+  flat int textureId;
+  vec2 fUv;
+  float fogAmount;
 
-out vec4 Color;
-noperspective centroid out float fHsl;
-flat out int textureId;
-out vec2 fUv;
-out float fogAmount;
-out vec4 positionLightSpace;
+  #if SHADOWS_ENABLED
+    ivec3 vertex;
+    vec4 lightSpacePosition;
+  #endif
+};
 
 #include hsl_to_rgb.glsl
 
@@ -74,7 +80,11 @@ float fogFactorLinear(const float dist, const float start, const float end) {
 
 void main()
 {
-  ivec3 vertex = VertexPosition.xyz;
+  #if !SHADOWS_ENABLED
+    ivec3 vertex;
+  #endif
+
+  vertex = VertexPosition.xyz;
   int ahsl = VertexPosition.w;
   float a = float(ahsl >> 24 & 0xff) / 255.f;
 
@@ -101,9 +111,9 @@ void main()
   }
 
   gl_Position = projectionMatrix * position;
-  if (enableShadows) {
-    positionLightSpace = shadowProjectionMatrix * position;
-  }
+  #if SHADOWS_ENABLED
+      lightSpacePosition = shadowProjectionMatrix * position;
+  #endif
 
   int fogWest = max(FOG_SCENE_EDGE_MIN, cameraX - drawDistance);
   int fogEast = min(FOG_SCENE_EDGE_MAX, cameraX + drawDistance - TILE_SIZE);

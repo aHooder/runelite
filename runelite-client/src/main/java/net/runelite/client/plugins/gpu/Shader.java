@@ -78,6 +78,11 @@ public class Shader
 				}
 
 				String source = template.load(unit.filename);
+				// TODO: remove unnecessary debug stuff
+				String[] lines = source.split("\n");
+				for (int j = 0; j < lines.length; j++)
+					lines[j] = (j + 1) + ": " + lines[j];
+				System.out.println(String.join("\n", lines));
 				gl.glShaderSource(shader, 1, new String[]{source}, null);
 				gl.glCompileShader(shader);
 

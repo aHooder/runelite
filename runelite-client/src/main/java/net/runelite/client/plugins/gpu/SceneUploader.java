@@ -25,6 +25,7 @@
 package net.runelite.client.plugins.gpu;
 
 import com.google.common.base.Stopwatch;
+import java.awt.Color;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -445,6 +446,22 @@ class SceneUploader
 		}
 	}
 
+	private int colorToRs2hsb(Color color)
+	{
+		float[] hsbVals = Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), null);
+
+		// "Correct" the brightness level to avoid going to white at full saturation, or having a low brightness at
+		// low saturation
+//		hsbVals[2] -= Math.min(hsbVals[1], hsbVals[2] / 2);
+		hsbVals[1] = 1.f;
+		hsbVals[2] = .5f;
+
+		int encode_hue = (int)(hsbVals[0] * 63);
+		int encode_saturation = (int)(hsbVals[1] * 7);
+		int encode_brightness = (int)(hsbVals[2] * 127);
+		return (encode_hue << 10) + (encode_saturation << 7) + (encode_brightness);
+	}
+
 	int pushFace(Model model, int face, boolean padUvs, GpuIntBuffer vertexBuffer, GpuFloatBuffer uvBuffer,
 		int xOffset, int yOffset, int zOffset, int orientation)
 	{
@@ -471,6 +488,35 @@ class SceneUploader
 		int color1 = color1s[face];
 		int color2 = color2s[face];
 		int color3 = color3s[face];
+
+//		if (transparencies != null &&
+//			(faceTextures == null || faceTextures[face] == -1) &&
+//			transparencies[face] == 0)
+//		if (
+//			transparencies != null &&
+//			(faceTextures == null || faceTextures[face] == -1) &&
+//			(transparencies[face] & 0xFF) > 0
+//		)
+//		{
+//			if (vertexY[triangleA] == 0 &&
+//				vertexY[triangleB] == 0 &&
+//				vertexY[triangleC] == 0)
+////			if (vertexY[triangleA] == vertexY[triangleB] &&
+////				vertexY[triangleC] == vertexY[triangleB])
+//			{
+////				if ((transparencies[face] & 0x80_00_00_00) == 0x80_00_00_00)
+////				{
+////					color1 = color2 = color3 = colorToRs2hsb(Color.RED);
+////				}
+////				else
+////				{
+////					System.out.println(Integer.toBinaryString(transparencies[face]));
+//				// The face is flat with the ground
+////				color1 = color2 = color3 = colorToRs2hsb(Color.GREEN);
+//				return 0;
+////				}
+//			}
+//		}
 
 		int packedAlphaPriority = packAlphaPriority(faceTextures, transparencies, facePriorities, face);
 

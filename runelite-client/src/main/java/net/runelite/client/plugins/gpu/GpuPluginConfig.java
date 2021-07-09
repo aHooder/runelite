@@ -49,6 +49,13 @@ public interface GpuPluginConfig extends Config
 	)
 	String shadowSection = "shadowSection";
 
+	@ConfigSection(
+		name = "Debug Shadows",
+		description = "Options that configure debugging of shadows",
+		position = 11
+	)
+	String shadowDebugSection = "shadowDebugSection";
+
 	@Range(
 		max = MAX_DISTANCE
 	)
@@ -204,13 +211,14 @@ public interface GpuPluginConfig extends Config
 	)
 	default ShadowAntiAliasing shadowAntiAliasing()
 	{
-		return ShadowAntiAliasing.PCF_3x3;
+		return ShadowAntiAliasing.PCF_3;
 	}
 
 	@Units(Units.PERCENT)
 	@Range(
 		min = 1,
-		max = 100
+		max = 100,
+		slider = true
 	)
 	@ConfigItem(
 		keyName = "shadowStrength",
@@ -224,8 +232,11 @@ public interface GpuPluginConfig extends Config
 		return 75;
 	}
 
+	@Units(Units.DEGREES)
 	@Range(
-		max = 360
+		max = 360,
+		slider = true,
+		wrapAround = true
 	)
 	@ConfigItem(
 		keyName = "shadowAngleHorizontal",
@@ -239,8 +250,11 @@ public interface GpuPluginConfig extends Config
 		return 120;
 	}
 
+	@Units(Units.DEGREES)
 	@Range(
-		max = 360
+		max = 360,
+		slider = true,
+		wrapAround = true
 	)
 	@ConfigItem(
 		keyName = "shadowAngleVertical",
@@ -252,5 +266,126 @@ public interface GpuPluginConfig extends Config
 	default int shadowAngleVertical()
 	{
 		return 60;
+	}
+
+	@Units(Units.PERCENT)
+	@Range(
+		max = 2000,
+		slider = true
+	)
+	@ConfigItem(
+		keyName = "shadowSunScale",
+		name = "PCSS Sun Scale",
+		description = "Determines the size of the sun, which affects soft shadows with PCSS. Larger needs more samples.",
+		section = shadowSection,
+		position = 8
+	)
+	default int shadowSunScale()
+	{
+		return 100;
+	}
+
+	@ConfigItem(
+		keyName = "freezeFrame",
+		name = "Freeze frame",
+		description = "Freeze the current frame.",
+		section = shadowDebugSection
+	)
+	default boolean freezeFrame()
+	{
+		return false;
+	}
+
+	@Range(
+		min = Integer.MIN_VALUE
+	)
+	@ConfigItem(
+		keyName = "debugView",
+		name = "Debug View ID",
+		description = "Which debug view to render. Debug view -10 is what I currently prefer, though it still has issues. Others are random debug stuff.",
+		section = shadowDebugSection
+	)
+	default int shadowDebugView()
+	{
+		return -10;
+	}
+
+	@ConfigItem(
+		keyName = "shadowMapDebug",
+		name = "Debug Shadow Maps",
+		description = "Whether to render debug views for shadow maps.",
+		section = shadowDebugSection
+	)
+	default boolean shadowMapDebug()
+	{
+		return false;
+	}
+
+	@Units(Units.PIXELS)
+	@Range(
+		min = 50,
+		max = 2048,
+		slider = true
+	)
+	@ConfigItem(
+		keyName = "shadowMapDebugSize",
+		name = "Debug Shadow Map Size",
+		description = "Set the dimensions for each shadow map debug tile.",
+		section = shadowDebugSection
+	)
+	default int shadowMapDebugSize()
+	{
+		return 256;
+	}
+
+	@Units(Units.PERCENT)
+	@Range(
+		min = 100,
+		max = 4000,
+		slider = true
+	)
+	@ConfigItem(
+		keyName = "shadowMapDebugZoom",
+		name = "Debug Shadow Map Zoom",
+		description = "Zoom into the shadow map.",
+		section = shadowDebugSection
+	)
+	default int shadowMapDebugZoom()
+	{
+		return 100;
+	}
+
+	@Units(Units.PERCENT)
+	@Range(
+		min = -100,
+		max = 100,
+		slider = true
+	)
+	@ConfigItem(
+		keyName = "shadowMapDebugOffsetX",
+		name = "Debug Shadow Map X Offset",
+		description = "Offset the shadow map.",
+		section = shadowDebugSection
+	)
+	default int shadowMapDebugOffsetX()
+	{
+		return 0;
+	}
+
+	@Units(Units.PERCENT)
+	@Range(
+		min = -100,
+		max = 100,
+		slider = true
+	)
+	@ConfigItem(
+		keyName = "shadowMapDebugOffsetY",
+		name = "Debug Shadow Map Y Offset",
+		description = "Offset the shadow map.",
+		section = shadowDebugSection
+	)
+	default int shadowMapDebugOffsetY()
+	{
+		return 0;
 	}
 }

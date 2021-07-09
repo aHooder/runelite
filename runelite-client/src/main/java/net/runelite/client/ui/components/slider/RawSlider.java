@@ -85,6 +85,9 @@ public class RawSlider extends JPanel
 				ctrlPressed = me.isControlDown();
 				shiftPressed = me.isShiftDown();
 				moveTarget(me.getX());
+				// Reset
+				ctrlPressed = false;
+				shiftPressed = false;
 			}
 
 			@Override

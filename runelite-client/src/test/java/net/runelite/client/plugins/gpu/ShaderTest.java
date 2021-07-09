@@ -32,6 +32,8 @@ import java.util.ArrayList;
 import java.util.List;
 import joptsimple.internal.Strings;
 import net.runelite.client.plugins.gpu.config.ShadowAntiAliasing;
+import static net.runelite.client.plugins.gpu.config.ShadowAntiAliasing.Technique.PCF;
+import static net.runelite.client.plugins.gpu.config.ShadowAntiAliasing.Technique.PCSS;
 import net.runelite.client.plugins.gpu.config.ShadowResolution;
 import net.runelite.client.plugins.gpu.template.Template;
 import org.junit.Assert;
@@ -51,6 +53,8 @@ public class ShaderTest
 		String verifier = System.getProperty("glslang.path");
 		Assume.assumeFalse("glslang.path is not set", Strings.isNullOrEmpty(verifier));
 
+		final ShadowAntiAliasing aa = ShadowAntiAliasing.PCF_21;
+
 		Template[] templates = {
 			new Template()
 				.addInclude(GpuPlugin.class)
@@ -60,13 +64,33 @@ public class ShaderTest
 				{
 					return GpuPlugin.WINDOWS_VERSION_HEADER;
 				}
-				if ("GENERATED_SHADOW_LOOKUP".equals(key))
+
+				// TODO: testing should be a lot more varied...
+
+				switch (key)
 				{
-					return GpuPlugin.generateShadowLookupFunction(key,
-						ShadowAntiAliasing.PCF_21x21,
-						ShadowResolution.RES_4096x4096,
-						-8,
-						7);
+					case "SHADOW_CONSTANTS":
+						return String.format(
+							"#define SHADOWS_ENABLED %d\n" +
+								"#define SHADOW_TRANSLUCENCY_ENABLED %d\n" +
+								"#define SHADOW_LINEAR_FILTERING %d\n" +
+								"#define USE_SHADOW_SAMPLER %d\n" +
+								"#define USE_PCF %d\n" +
+								"#define USE_PCSS %d\n" +
+								"#define PCF_KERNEL_SIZE %d\n",
+							1,
+							1,
+							aa.useLinearFiltering ? 1 : 0,
+							aa.useShadowSampler() ? 1 : 0,
+							aa.technique == PCF ? 1 : 0,
+							aa.technique == PCSS ? 1 : 0,
+							aa.kernelSize);
+					case "PCF_DEPTH_LOOKUP":
+						return GpuPlugin.generateUnrolledPcfDepthLookup(key,
+							ShadowResolution.RES_4096x4096, aa, true);
+					case "PCF_RGB_LOOKUP":
+						return GpuPlugin.generateUnrolledPcfRgbLookup(key,
+							ShadowResolution.RES_4096x4096, aa);
 				}
 				return null;
 			}),

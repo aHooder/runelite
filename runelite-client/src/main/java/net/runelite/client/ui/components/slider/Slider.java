@@ -177,13 +177,17 @@ public class Slider extends JPanel
 			@Override
 			public void keyPressed(KeyEvent keyEvent)
 			{
+				int increment = !keyEvent.isControlDown() ? 1 :
+					keyEvent.isShiftDown() ? 5 : 10;
 				if (keyEvent.getKeyCode() == KeyEvent.VK_UP)
 				{
-					update(self.value + 1);
+					update(self.value + increment);
+					keyEvent.consume();
 				}
 				else if (keyEvent.getKeyCode() == KeyEvent.VK_DOWN)
 				{
-					update(self.value - 1);
+					update(self.value - increment);
+					keyEvent.consume();
 				}
 			}
 
@@ -228,7 +232,7 @@ public class Slider extends JPanel
 			c.accept(value);
 		}
 
-		slider.setRatio((float) value / (float) max);
+		slider.setRatio((float) (value - min) / (float) (max - min));
 		if (this.input != null)
 			input.setValue(value);
 
@@ -244,7 +248,7 @@ public class Slider extends JPanel
 		{
 			// When being dragged, just accommodate the maximum number of symbols
 			text = text.replaceAll("\\d", "");
-			int numChars = (int) Math.log10(max) + 1;
+			int numChars = (int) Math.log10(Math.max(Math.abs(min), Math.abs(max))) + 1;
 			for (int i = 0; i < numChars; i++)
 			{
 				text += "0";
