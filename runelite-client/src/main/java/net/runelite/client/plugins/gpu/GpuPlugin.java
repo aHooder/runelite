@@ -134,6 +134,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	}
 
 	private ComputeMode computeMode = ComputeMode.NONE;
+	private boolean computeVanillaUvsWithGeometryShader;
 
 	private Canvas canvas;
 	private AWTContext awtContext;
@@ -148,9 +149,13 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			"#extension GL_ARB_explicit_attrib_location : require\n";
 	static final String WINDOWS_VERSION_HEADER = "#version 430\n";
 
-	static final Shader PROGRAM = new Shader()
+	static final Shader PROGRAM_WITH_GEOM = new Shader()
 		.add(GL43C.GL_VERTEX_SHADER, "vert.glsl")
 		.add(GL43C.GL_GEOMETRY_SHADER, "geom.glsl")
+		.add(GL43C.GL_FRAGMENT_SHADER, "frag.glsl");
+
+	static final Shader PROGRAM_WITHOUT_GEOM = new Shader()
+		.add(GL43C.GL_VERTEX_SHADER, "vert.glsl")
 		.add(GL43C.GL_FRAGMENT_SHADER, "frag.glsl");
 
 	static final Shader COMPUTE_PROGRAM = new Shader()
@@ -309,6 +314,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				computeMode = config.useComputeShaders()
 					? (OSType.getOSType() == OSType.MacOS ? ComputeMode.OPENCL : ComputeMode.OPENGL)
 					: ComputeMode.NONE;
+				computeVanillaUvsWithGeometryShader =
+					computeMode == ComputeMode.NONE || config.computeVanillaUvsWithGeometryShader();
 
 				// lwjgl defaults to lwjgl- + user.name, but this breaks if the username would cause an invalid path
 				// to be created.
@@ -577,6 +584,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				return "#define THREAD_COUNT " + threadCount + "\n" +
 					"#define FACES_PER_THREAD " + facesPerThread + "\n";
 			}
+			if ("COMPUTE_VANILLA_UVS_IN_GEOMETRY_SHADER".equals(key))
+			{
+				return "#define " + key + " " + (computeVanillaUvsWithGeometryShader ? 1 : 0) + "\n";
+			}
 			return null;
 		});
 		template.addInclude(GpuPlugin.class);
@@ -586,7 +597,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	private void initProgram() throws ShaderException
 	{
 		Template template = createTemplate(-1, -1);
-		glProgram = PROGRAM.compile(template);
+		Shader program = computeVanillaUvsWithGeometryShader ? PROGRAM_WITH_GEOM : PROGRAM_WITHOUT_GEOM;
+		glProgram = program.compile(template);
 		glUiProgram = UI_PROGRAM.compile(template);
 
 		if (computeMode == ComputeMode.OPENGL)

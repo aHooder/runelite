@@ -70,7 +70,8 @@ public class ShaderTest
 		};
 
 		Shader[] shaders = {
-			GpuPlugin.PROGRAM,
+			GpuPlugin.PROGRAM_WITHOUT_GEOM,
+			GpuPlugin.PROGRAM_WITH_GEOM,
 			GpuPlugin.COMPUTE_PROGRAM,
 			GpuPlugin.UNORDERED_COMPUTE_PROGRAM,
 			GpuPlugin.UI_PROGRAM,

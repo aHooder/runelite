@@ -24,17 +24,14 @@
  */
 #include COMPUTE_VANILLA_UVS_IN_GEOMETRY_SHADER
 
-// smallest unit of the texture which can be moved per tick. textures are all
-// 128x128px - so this is equivalent to +1px
-#define TEXTURE_ANIM_UNIT (1.0f / 128.0f)
+void compute_uv(float3 cameraPos, float3 f1, float3 f2, float3 f3, float3 t1, float3 t2, float3 t3,
+                /* out */ float2 *uv1, float2 *uv2, float2 *uv3) {
+  float3 v1 = t1;
+  float3 v2 = t2 - v1;
+  float3 v3 = t3 - v1;
 
-void compute_uv(vec3 cameraPos, vec3 f1, vec3 f2, vec3 f3, vec3 t1, vec3 t2, vec3 t3, out vec2 uv1, out vec2 uv2, out vec2 uv3) {
-  vec3 v1 = t1;
-  vec3 v2 = t2 - v1;
-  vec3 v3 = t3 - v1;
-
-  vec3 texNormal = cross(v2, v3);
-  vec3 vertexToCamera;
+  float3 texNormal = cross(v2, v3);
+  float3 vertexToCamera;
 
   // Set the tri vertex position to the intersection point on the tex tri plane of the tri vertex
   // along the vector from the tri vertex to the camera.
@@ -54,11 +51,11 @@ void compute_uv(vec3 cameraPos, vec3 f1, vec3 f2, vec3 f3, vec3 t1, vec3 t2, vec
   vertexToCamera = cameraPos - f3;
   f3 += vertexToCamera * dot(t3 - f3, texNormal) / dot(vertexToCamera, texNormal);
 
-  vec3 v4 = f1 - v1;
-  vec3 v5 = f2 - v1;
-  vec3 v6 = f3 - v1;
+  float3 v4 = f1 - v1;
+  float3 v5 = f2 - v1;
+  float3 v6 = f3 - v1;
 
-  vec3 v8 = cross(v3, texNormal);
+  float3 v8 = cross(v3, texNormal);
   float d = 1.0f / dot(v8, v2);
 
   float u0 = dot(v8, v4) * d;
@@ -72,7 +69,7 @@ void compute_uv(vec3 cameraPos, vec3 f1, vec3 f2, vec3 f3, vec3 t1, vec3 t2, vec
   float v1_ = dot(v8, v5) * d;
   float v2_ = dot(v8, v6) * d;
 
-  uv1 = vec2(u0, v0_);
-  uv2 = vec2(u1, v1_);
-  uv3 = vec2(u2, v2_);
+  *uv1 = (float2)(u0, v0_);
+  *uv2 = (float2)(u1, v1_);
+  *uv3 = (float2)(u2, v2_);
 }

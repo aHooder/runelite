@@ -206,4 +206,16 @@ public interface GpuPluginConfig extends Config
 	{
 		return 60;
 	}
+
+	@ConfigItem(
+		keyName = "computeVanillaUvsWithGeometryShader",
+		name = "Use geometry shader",
+		description = "Will always be used if compute shaders are disabled",
+		warning = "You must restart the plugin for this change to take effect.",
+		position = 13
+	)
+	default boolean computeVanillaUvsWithGeometryShader()
+	{
+		return false;
+	}
 }

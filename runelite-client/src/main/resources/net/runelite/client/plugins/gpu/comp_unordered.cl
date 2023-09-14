@@ -25,6 +25,7 @@
  */
 
 #include "cl_types.cl"
+#include "uv.cl"
 
 __kernel __attribute__((reqd_work_group_size(6, 1, 1))) void computeUnordered(__global const struct modelinfo *ol, __global const int4 *vb,
                                                                               __global const int4 *tempvb, __global const float4 *texb,
@@ -59,7 +60,10 @@ __kernel __attribute__((reqd_work_group_size(6, 1, 1))) void computeUnordered(__
 
   uint myOffset = localId;
   int4 pos = (int4)(minfo.x, minfo.y, minfo.z, 0);
-  float4 texPos = convert_float4(pos.wxyz);
+  float4 texPos = (float4)(0.0f, 0.0f, 0.0f, 0.0f);
+  #if COMPUTE_VANILLA_UVS_IN_GEOMETRY_SHADER
+  texPos = convert_float4(pos.wxyz);
+  #endif
 
   // position vertices in scene and write to out buffer
   vout[outOffset + myOffset * 3] = pos + thisA;

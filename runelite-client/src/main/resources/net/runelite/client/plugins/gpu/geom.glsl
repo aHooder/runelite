@@ -25,10 +25,6 @@
 
 #version 330
 
-// smallest unit of the texture which can be moved per tick. textures are all
-// 128x128px - so this is equivalent to +1px
-#define TEXTURE_ANIM_UNIT (1.0f / 128.0f)
-
 layout(triangles) in;
 layout(triangle_strip, max_vertices = 3) out;
 
@@ -67,11 +63,11 @@ void main() {
   int textureId = gTextureId[0];
   vec2 uv[3];
 
-  if (textureId > 0) {
+  if (textureId >= 0) {
     ivec3 cameraPos = ivec3(cameraX, cameraY, cameraZ);
     compute_uv(cameraPos, gVertex[0], gVertex[1], gVertex[2], gTexPos[0], gTexPos[1], gTexPos[2], uv[0], uv[1], uv[2]);
 
-    vec2 textureAnim = textureAnimations[textureId - 1];
+    vec2 textureAnim = textureAnimations[textureId];
     for (int i = 0; i < 3; ++i) {
       uv[i] += tick * textureAnim * TEXTURE_ANIM_UNIT;
     }

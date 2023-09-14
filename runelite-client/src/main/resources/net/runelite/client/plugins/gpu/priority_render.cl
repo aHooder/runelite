@@ -22,6 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "uv.cl"
 
 // Calculate adjusted priority for a face with a given priority, distance, and
 // model global min10 and face distance averages. This allows positioning faces
@@ -296,9 +297,34 @@ void sort_and_insert(__local struct shared_data *shared, __constant struct unifo
       }
 
       int orientation = flags & 0x7ff;
+
+      #if COMPUTE_VANILLA_UVS_IN_GEOMETRY_SHADER
       uvout[outOffset + myOffset * 3] = (float4)(texA.x, rotatef_vertex(texA.yzw, orientation) + convert_float3(pos.xyz));
       uvout[outOffset + myOffset * 3 + 1] = (float4)(texB.x, rotatef_vertex(texB.yzw, orientation) + convert_float3(pos.xyz));
       uvout[outOffset + myOffset * 3 + 2] = (float4)(texC.x, rotatef_vertex(texC.yzw, orientation) + convert_float3(pos.xyz));
+      #else
+      // rotate back to original orientation because the tex triangles
+      // are not rotated
+      // TODO: account for hillskew
+      int4 f1 = rotate_vertex(uni, thisrvA - pos, (2048 - orientation) & 2047);
+      int4 f2 = rotate_vertex(uni, thisrvB - pos, (2048 - orientation) & 2047);
+      int4 f3 = rotate_vertex(uni, thisrvC - pos, (2048 - orientation) & 2047);
+
+      // Transform camera position to model space
+      int4 cameraPos = rotate_vertex(uni,
+        (int4)(uni->cameraX, uni->cameraY, uni->cameraZ, 0) - pos,
+        (2048 - orientation) & 2047);
+
+      float2 uv1, uv2, uv3;
+      compute_uv(convert_float3(cameraPos.xyz),
+        convert_float3(f1.xyz), convert_float3(f2.xyz), convert_float3(f3.xyz),
+        texA.yzw, texB.yzw, texC.yzw,
+        &uv1, &uv2, &uv3);
+
+      uvout[outOffset + myOffset * 3] = (float4)(texA.x, uv1.xy, 0);
+      uvout[outOffset + myOffset * 3 + 1] = (float4)(texB.x, uv2.xy, 0);
+      uvout[outOffset + myOffset * 3 + 2] = (float4)(texC.x, uv3.xy, 0);
+      #endif
     }
   }
 }

@@ -22,6 +22,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include "uv.glsl"
 
 layout(binding = 2) uniform isampler3D tileHeightSampler;
 
@@ -291,9 +292,29 @@ void sort_and_insert(uint localId, modelinfo minfo, int thisPriority, int thisDi
       }
 
       int orientation = flags & 0x7ff;
+
+      #if COMPUTE_VANILLA_UVS_IN_GEOMETRY_SHADER
       uvout[outOffset + myOffset * 3] = vec4(texA.x, rotatef(texA.yzw, orientation) + pos.xyz);
       uvout[outOffset + myOffset * 3 + 1] = vec4(texB.x, rotatef(texB.yzw, orientation) + pos.xyz);
       uvout[outOffset + myOffset * 3 + 2] = vec4(texC.x, rotatef(texC.yzw, orientation) + pos.xyz);
+      #else
+      // rotate back to original orientation because the tex triangles
+      // are not rotated
+      // TODO: account for hillskew
+      ivec4 f1 = rotate(thisrvA - pos, (2048 - orientation) & 2047);
+      ivec4 f2 = rotate(thisrvB - pos, (2048 - orientation) & 2047);
+      ivec4 f3 = rotate(thisrvC - pos, (2048 - orientation) & 2047);
+
+      // Transform camera position to model space
+      ivec4 cameraPos = rotate(ivec4(cameraX, cameraY, cameraZ, 0) - pos, (2048 - orientation) & 2047);
+
+      vec2 uv1, uv2, uv3;
+      compute_uv(cameraPos.xyz, f1.xyz, f2.xyz, f3.xyz, texA.yzw, texB.yzw, texC.yzw, uv1, uv2, uv3);
+
+      uvout[outOffset + myOffset * 3] = vec4(texA.x, uv1.xy, 0);
+      uvout[outOffset + myOffset * 3 + 1] = vec4(texB.x, uv2.xy, 0);
+      uvout[outOffset + myOffset * 3 + 2] = vec4(texC.x, uv3.xy, 0);
+      #endif
     }
   }
 }

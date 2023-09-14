@@ -267,6 +267,14 @@ class SceneUploader
 		if (padUvs || tile.getTexture() != -1)
 		{
 			int tex = tile.getTexture() + 1;
+//			uvBuffer.put(tex, 1.0f, 1.0f, 0f);
+//			uvBuffer.put(tex, 0.0f, 1.0f, 0f);
+//			uvBuffer.put(tex, 1.0f, 0.0f, 0f);
+//
+//			uvBuffer.put(tex, 0.0f, 0.0f, 0f);
+//			uvBuffer.put(tex, 1.0f, 0.0f, 0f);
+//			uvBuffer.put(tex, 0.0f, 1.0f, 0f);
+
 			uvBuffer.put(tex, vertexDx, vertexDz, vertexDy);
 			uvBuffer.put(tex, vertexCx, vertexCz, vertexCy);
 			uvBuffer.put(tex, vertexBx, vertexBz, vertexBy);

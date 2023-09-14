@@ -26,6 +26,7 @@
 #include version_header
 
 #include "comp_common.glsl"
+#include "uv.glsl"
 
 layout(local_size_x = 6) in;
 
@@ -60,7 +61,12 @@ void main() {
 
   uint myOffset = localId;
   ivec4 pos = ivec4(minfo.x, minfo.y, minfo.z, 0);
-  ivec4 texPos = pos.wxyz;
+  ivec4 texPos = ivec4(0);
+  #if COMPUTE_VANILLA_UVS_IN_GEOMETRY_SHADER
+  texPos = pos.wxyz;
+  #else
+  // TODO
+  #endif
 
   // position vertices in scene and write to out buffer
   vout[outOffset + myOffset * 3] = pos + thisA;

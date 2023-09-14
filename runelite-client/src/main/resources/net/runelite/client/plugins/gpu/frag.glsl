@@ -47,10 +47,8 @@ out vec4 FragColor;
 void main() {
   vec4 c;
 
-  if (fTextureId > 0) {
-    int textureIdx = fTextureId - 1;
-
-    vec4 textureColor = texture(textures, vec3(fUv, float(textureIdx)));
+  if (fTextureId >= 0) {
+    vec4 textureColor = texture(textures, vec3(fUv, float(fTextureId)));
     vec4 textureColorBrightness = pow(textureColor, vec4(brightness, brightness, brightness, 1.0f));
 
     // textured triangles hsl is a 7 bit lightness 2-126
@@ -69,7 +67,7 @@ void main() {
 
   vec3 mixedColor = mix(c.rgb, fogColor.rgb, fFogAmount);
 #ifdef FRAG_UVS
-  if (fTextureId > 0) {
+  if (fTextureId >= 0) {
     FragColor = vec4(fUv.x, 0, fUv.y, 1);
   } else {
 #endif
